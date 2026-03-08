@@ -56,31 +56,43 @@ def initialize_basic_graph(
     df = df.sort_values("Date")
     df["type"] = df["type"].astype(str).str.strip().str.upper()
 
-
-    # Use only event dates for x-axis ticks
-    xaxis_dates = df["Date"].unique()
+    # Temporarily exclude IPCI Events from Xaxis since no payoffs are shown in plot (Block below if added back in)
+    # ***!!!But not for End Date so NominalValue is shown Correctly!!!***
+    xaxis_dates = df.loc[df["type"] != "IPCI", "Date"].unique()
     xaxis = sorted(pd.to_datetime(xaxis_dates).tolist())
     xlabels = [{"at": dt, "label": dt.strftime("%Y-%m-%d")} for dt in xaxis]
 
-    # Define x-axis limits with a buffer
-    start_date = df["Date"].min()
-    end_date = df["Date"].max()
+    start_date = df.loc[df["type"] != "IPCI", "Date"].min()
+    end_date = df.loc[df["type"] != "IPCI", "Date"].max()
+
+    # # Original Block that uses all events
+    # # Use only event dates for x-axis ticks
+    # xaxis_dates = df["Date"].unique()
+    # xaxis = sorted(pd.to_datetime(xaxis_dates).tolist())
+    # xlabels = [{"at": dt, "label": dt.strftime("%Y-%m-%d")} for dt in xaxis]
+
+    # # Define x-axis limits with a buffer
+    # start_date = df["Date"].min()
+    # end_date = df["Date"].max()
+
     date_range_days = (end_date - start_date).days
     padding = int(date_range_days * 0.05)  # 5% of total range
     xlim = (start_date - pd.Timedelta(days=padding), end_date + pd.Timedelta(days=padding))
 
     # Y1 (Notional-related) axis
-    notional_events = df[df["type"].isin(["CDD", "IED", "PRD", "TD", "MD", "OPS", "DPR", "RES", "ETA", "ITF"])]
+    notional_events = df[df["type"].isin(["CDD", "IED", "PRD", "TD", "MD", "OPS", "DPR", "RES", "ETA", "ITF", "AFD"])]
     y1_data = notional_events["payoff"].abs().tolist()
     if "NominalValue" in df.columns:
         y1_data += df["NominalValue"].dropna().abs().tolist()
+    if "nominalValue" in df.columns:
+        y1_data += df["nominalValue"].dropna().abs().tolist()
     y1_max = 10 * np.ceil(max(y1_data + [1]) / 10) + np.ceil(max(y1_data)) * 0.035
     y1_min = 0
     y1_ticks = np.linspace(0, y1_max - np.ceil(max(y1_data)) * 0.035, 5)
     y1_labels = [{"at": val, "label": f"{val:.0f}"} for val in y1_ticks]
 
     # Y2 (Cashflow-related) axis with stacking awareness and fallback
-    y2_events = df[df["type"].isin(["IP", "IPCI", "PR", "DV", "MR", "STD", "DPR"])]
+    y2_events = df[df["type"].isin(["IP", "PR", "DV", "MR", "STD", "DPR"])] # "IPCI" removing IPCI since no payoff
     y2_data = y2_events["payoff"].abs().tolist()
 
     # Try stack-aware scaling using IP + PR
@@ -262,7 +274,7 @@ def add_notional_payment_layer(graph, df):
     df = df.copy()
     df["Date"] = pd.to_datetime(df["time"])
 
-    for _, row in df[df["type"].isin(["IED", "MD", "PRD", "TD"])].iterrows():
+    for _, row in df[df["type"].isin(["IED", "MD", "PRD", "TD", "AFD"])].iterrows():
         event_type = row["type"]
         date = row["Date"]
         value = row["payoff"]
@@ -319,7 +331,7 @@ def add_interest_layer(graph, df):
     df["Date"] = pd.to_datetime(df["time"])
     scale = graph.get("y2.scale", 1)
 
-    for _, row in df[df["type"] == "IP"].iterrows():
+    for _, row in df[df["type"].isin(["IP"])].iterrows(): #, "IPCI" removing ipci since no payoff
         date = row["Date"]
         value = row["payoff"]
 
@@ -341,7 +353,7 @@ def add_interest_layer(graph, df):
                 "linetype": "-",  # solid line
                 "linewidth": 1.5,
                 "axis": "y2",  # FIX: ensure it goes to ax2
-                "label": "IP",
+                "label": row["type"],
             }
         )
 
@@ -352,7 +364,7 @@ def add_interest_layer(graph, df):
             {
                 "x": date + horizontal_shift,
                 "y": y_end + (10 if value >= 0 else -10),
-                "label": "IP",
+                "label": row["type"],
                 "size": 8,
                 "axis": "y2",  # FIX: ensure it goes to ax2
             }
