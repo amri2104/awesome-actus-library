@@ -12,7 +12,32 @@ def initialize_graph(*dfs, contract_type, title, y1_label="Notional/Principal", 
     else:
         return initialize_basic_graph(dfs[0], title=title, y1_label=y1_label, y2_label=y2_label)
 
-def initialize_basic_graph(df, title="Contract Events", x_label="Date", y1_label="Notional/Principal", y2_label="Interest Payments"):
+def nice_cashflow_max(raw_max: float) -> float:
+    """
+    Map a raw cashflow maximum to a visually 'nice' axis maximum.
+    """
+    if raw_max <= 0:
+        return 1.0
+
+    if raw_max <= 0.5:
+        return 0.5
+    elif raw_max <= 1:
+        return 1.0
+    elif raw_max <= 2:
+        return 2.0
+    elif raw_max <= 5:
+        return 5.0
+    else:
+        # existing behavior for interest-sized cashflows
+        return 10 * np.ceil(raw_max / 10)
+
+def initialize_basic_graph(
+    df,
+    title="Contract Events",
+    x_label="Date",
+    y1_label="Notional/Principal",
+    y2_label="Interest Payments",
+):
     """
     Initialize the graph structure for a basic (single) ACTUS contract.
 
@@ -29,48 +54,81 @@ def initialize_basic_graph(df, title="Contract Events", x_label="Date", y1_label
     df = df.copy()
     df["Date"] = pd.to_datetime(df["time"])
     df = df.sort_values("Date")
+    df["type"] = df["type"].astype(str).str.strip().str.upper()
 
-    # Use only event dates for x-axis ticks
-    xaxis_dates = df["Date"].unique()
+    # Temporarily exclude IPCI Events from Xaxis since no payoffs are shown in plot (Block below if added back in)
+    # ***!!!But not for End Date so NominalValue is shown Correctly!!!***
+    xaxis_dates = df.loc[df["type"] != "IPCI", "Date"].unique()
     xaxis = sorted(pd.to_datetime(xaxis_dates).tolist())
     xlabels = [{"at": dt, "label": dt.strftime("%Y-%m-%d")} for dt in xaxis]
 
-    # Define x-axis limits with a buffer
-    start_date = df["Date"].min()
-    end_date = df["Date"].max()
+    start_date = df.loc[df["type"] != "IPCI", "Date"].min()
+    end_date = df.loc[df["type"] != "IPCI", "Date"].max()
+
+    # # Original Block that uses all events
+    # # Use only event dates for x-axis ticks
+    # xaxis_dates = df["Date"].unique()
+    # xaxis = sorted(pd.to_datetime(xaxis_dates).tolist())
+    # xlabels = [{"at": dt, "label": dt.strftime("%Y-%m-%d")} for dt in xaxis]
+
+    # # Define x-axis limits with a buffer
+    # start_date = df["Date"].min()
+    # end_date = df["Date"].max()
+
     date_range_days = (end_date - start_date).days
     padding = int(date_range_days * 0.05)  # 5% of total range
     xlim = (start_date - pd.Timedelta(days=padding), end_date + pd.Timedelta(days=padding))
 
-
     # Y1 (Notional-related) axis
-    notional_events = df[df["type"].isin(["CDD", "IED", "PRD", "TD", "MD", "OPS", "DPR", "RES", "ETA", "ITF"])]
+    notional_events = df[df["type"].isin(["CDD", "IED", "PRD", "TD", "MD", "OPS", "DPR", "RES", "ETA", "ITF", "AFD"])]
     y1_data = notional_events["payoff"].abs().tolist()
     if "NominalValue" in df.columns:
         y1_data += df["NominalValue"].dropna().abs().tolist()
-    y1_max = 10 * np.ceil(max(y1_data + [1]) / 10) + np.ceil(max(y1_data))*0.035
+    if "nominalValue" in df.columns:
+        y1_data += df["nominalValue"].dropna().abs().tolist()
+    y1_max = 10 * np.ceil(max(y1_data + [1]) / 10) + np.ceil(max(y1_data)) * 0.035
     y1_min = 0
-    y1_ticks = np.linspace(0, y1_max-np.ceil(max(y1_data))*0.035, 5)
+    y1_ticks = np.linspace(0, y1_max - np.ceil(max(y1_data)) * 0.035, 5)
     y1_labels = [{"at": val, "label": f"{val:.0f}"} for val in y1_ticks]
 
     # Y2 (Cashflow-related) axis with stacking awareness and fallback
-    y2_events = df[df["type"].isin(["IP", "IPCI", "PR", "DV", "MR", "STD", "DPR"])]
+    y2_events = df[df["type"].isin(["IP", "PR", "DV", "MR", "STD", "DPR"])] # "IPCI" removing IPCI since no payoff
     y2_data = y2_events["payoff"].abs().tolist()
 
     # Try stack-aware scaling using IP + PR
     stacked_events = df[df["type"].isin(["IP", "PR"])].copy()
     stacked_events["Date"] = pd.to_datetime(stacked_events["time"])
 
+    # if not stacked_events.empty:
+    #     stacked_y2 = stacked_events.groupby("Date")["payoff"].apply(lambda x: sum(abs(v) for v in x))
+    #     y2_max = 10 * np.ceil(stacked_y2.max() / 10)
+    # else:
+    #     y2_max = 10 * np.ceil(max(y2_data + [1]) / 10)
+
     if not stacked_events.empty:
         stacked_y2 = stacked_events.groupby("Date")["payoff"].apply(lambda x: sum(abs(v) for v in x))
-        y2_max = 10 * np.ceil(stacked_y2.max() / 10)
+        raw_max = stacked_y2.max()
     else:
-        y2_max = 10 * np.ceil(max(y2_data + [1]) / 10)
+        raw_max = max(y2_data + [0])
+
+    y2_max = nice_cashflow_max(raw_max)
+
 
     y2_scale = 0.5 * y1_max / y2_max if y2_max != 0 else 1
     y2_ticks = np.linspace(0, y2_max, 5)
-    y2_labels = [{"at": val * y2_scale, "label": f"{val:.0f}"} for val in y2_ticks]
+    # y2_labels = [{"at": val * y2_scale, "label": f"{val:.0f}"} for val in y2_ticks]
+    # Choose decimal precision based on magnitude
+    if y2_max < 1:
+        fmt = "{:.2f}"
+    elif y2_max < 10:
+        fmt = "{:.1f}"
+    else:
+        fmt = "{:.0f}"
 
+    y2_labels = [
+        {"at": val * y2_scale, "label": fmt.format(val)}
+        for val in y2_ticks
+    ]
 
     # Construct the graph object
     graph = {
@@ -78,24 +136,22 @@ def initialize_basic_graph(df, title="Contract Events", x_label="Date", y1_label
         "x.lab": x_label,
         "y1.lab": y1_label,
         "y2.lab": y2_label,
-
         "xaxis": xaxis,
         "xlabels": xlabels,
         "x.lim": xlim,
-
         "y.lim": (y1_min, y1_max),
         "ylabels": y1_labels,
         "y2labels": y2_labels,
         "y2.scale": y2_scale,
-
         "text": [],
         "arrows": [],
         "lines": [],
         "cycles": [],
-        "events": []
+        "events": [],
     }
 
     return graph
+
 
 def initialize_combined_graph(df_parent, df_child1, df_child2=None, title="Combined Contract Events"):
     """
@@ -218,7 +274,7 @@ def add_notional_payment_layer(graph, df):
     df = df.copy()
     df["Date"] = pd.to_datetime(df["time"])
 
-    for _, row in df[df["type"].isin(["IED", "MD"])].iterrows():
+    for _, row in df[df["type"].isin(["IED", "MD", "PRD", "TD", "AFD"])].iterrows():
         event_type = row["type"]
         date = row["Date"]
         value = row["payoff"]
@@ -230,27 +286,36 @@ def add_notional_payment_layer(graph, df):
         else:
             y_start, y_end = y_base, y_tip  # arrow up
 
-        graph["arrows"].append({
-            "x0": date, 
-            "y0": y_start, 
-            "x1": date, 
-            "y1": y_end,
-            "color": "red", 
-            "linetype": "-", 
-            "linewidth": 1.5
-        })
-        date_range_days = (graph["x.lim"][1] - graph["x.lim"][0]).days
-        horizontal_shift = pd.Timedelta(days=int(date_range_days * 0.01))  # ~1% of range
+        graph["arrows"].append(
+            {
+                "x0": date,
+                "y0": y_start,
+                "x1": date,
+                "y1": y_end,
+                "color": "red",
+                "linetype": "-",
+                "linewidth": 1.5,
+                "axis": "y1",  # FIX: explicit axis
+                "label": event_type,
+            }
+        )
 
-        graph["text"].append({
-            "x": date + horizontal_shift, 
-            "y": y_end + 0.05*(abs(value) if event_type == "IED" else -abs(value)),
-            "label": event_type, 
-            "size": 8
-        })
+        date_range_days = (graph["x.lim"][1] - graph["x.lim"][0]).days
+        horizontal_shift = pd.Timedelta(days=max(1, int(date_range_days * 0.01)))  # ~1% of range
+
+        graph["text"].append(
+            {
+                "x": date + horizontal_shift,
+                "y": y_end + 0.05 * (abs(value) if event_type == "IED" else -abs(value)),
+                "label": event_type,
+                "size": 8,
+                "axis": "y1",  # FIX: explicit axis
+            }
+        )
         graph["events"].append(event_type)
 
     return graph
+
 
 def add_interest_layer(graph, df):
     """
@@ -266,7 +331,7 @@ def add_interest_layer(graph, df):
     df["Date"] = pd.to_datetime(df["time"])
     scale = graph.get("y2.scale", 1)
 
-    for _, row in df[df["type"] == "IP"].iterrows():
+    for _, row in df[df["type"].isin(["IP"])].iterrows(): #, "IPCI" removing ipci since no payoff
         date = row["Date"]
         value = row["payoff"]
 
@@ -276,28 +341,94 @@ def add_interest_layer(graph, df):
             y_start, y_end = y_tip, y_base  # arrow down
         else:
             y_start, y_end = y_base, y_tip  # arrow up
-        # print(f"[DEBUG] Adding IP arrow on {date} from {y_start} to {y_end} with value {value}")
-        graph["arrows"].append({
-            "x0": date,
-            "y0": y_start,
-            "x1": date,
-            "y1": y_end,
-            "color": "green",
-            "linetype": "-",  # solid line
-            "linewidth": 1.5
-        })
-        date_range_days = (graph["x.lim"][1] - graph["x.lim"][0]).days
-        horizontal_shift = pd.Timedelta(days=int(date_range_days * 0.01))  # ~1% of range
 
-        graph["text"].append({
-            "x": date + horizontal_shift,
-            "y": y_end + (10 if value >= 0 else -10),
-            "label": "IP",
-            "size": 8
-        })
+        # print(f"[DEBUG] Adding IP arrow on {date} from {y_start} to {y_end} with value {value}")
+        graph["arrows"].append(
+            {
+                "x0": date,
+                "y0": y_start,
+                "x1": date,
+                "y1": y_end,
+                "color": "green",
+                "linetype": "-",  # solid line
+                "linewidth": 1.5,
+                "axis": "y2",  # FIX: ensure it goes to ax2
+                "label": row["type"],
+            }
+        )
+
+        date_range_days = (graph["x.lim"][1] - graph["x.lim"][0]).days
+        horizontal_shift = pd.Timedelta(days=max(1, int(date_range_days * 0.01)))  # ~1% of range
+
+        graph["text"].append(
+            {
+                "x": date + horizontal_shift,
+                "y": y_end + (10 if value >= 0 else -10),
+                "label": row["type"],
+                "size": 8,
+                "axis": "y2",  # FIX: ensure it goes to ax2
+            }
+        )
         graph["events"].append("IP")
 
     return graph
+
+
+def add_dividend_layer(graph, df):
+    """
+    Adds dividend payments (DV) as orange arrows on Y2, scaled using y2.scale.
+
+    Parameters:
+        graph (dict): Plot blueprint object
+        df (pd.DataFrame): Contract event data
+    """
+    df = df.copy()
+    df["Date"] = pd.to_datetime(df["time"])
+    scale = graph.get("y2.scale", 1)
+
+    dv_df = df[df["type"] == "DV"].sort_values("Date")
+    if dv_df.empty:
+        return graph
+
+    for _, row in dv_df.iterrows():
+        date = row["Date"]
+        value = row["payoff"]
+
+        y_base = 0
+        y_tip = abs(value) * scale
+        y_start, y_end = (y_tip, y_base) if value < 0 else (y_base, y_tip)
+
+        graph["arrows"].append(
+            {
+                "x0": date,
+                "y0": y_start,
+                "x1": date,
+                "y1": y_end,
+                "color": "orange",
+                "linetype": "-",
+                "linewidth": 1.5,
+                "axis": "y2",
+                "label": "DV",
+            }
+        )
+
+        date_range_days = (graph["x.lim"][1] - graph["x.lim"][0]).days
+        horizontal_shift = pd.Timedelta(days=max(1, int(date_range_days * 0.01)))
+
+        graph["text"].append(
+            {
+                "x": date + horizontal_shift,
+                "y": y_end + (10 if value >= 0 else -10),
+                "label": "DV",
+                "size": 8,
+                "axis": "y2",
+            }
+        )
+
+        graph["events"].append("DV")
+
+    return graph
+
 
 def add_redemption_layer(graph, df):
     """
@@ -329,26 +460,36 @@ def add_redemption_layer(graph, df):
         stack[date] = y_end  # always store the upper tip for next stacking
 
         # print(f"[DEBUG] Adding PR arrow on {date} from {y_start} to {y_end} with value {value}")
-        graph["arrows"].append({
-            "x0": date,
-            "y0": y_start,
-            "x1": date,
-            "y1": y_end,
-            "color": "red",
-            "linetype": "-",
-            "linewidth": 1.5
-        })
+        graph["arrows"].append(
+            {
+                "x0": date,
+                "y0": y_start,
+                "x1": date,
+                "y1": y_end,
+                "color": "red",
+                "linetype": "-",
+                "linewidth": 1.5,
+                "axis": "y2",  # FIX: ensure PR is drawn on cashflow axis
+                "label": "PR",
+            }
+        )
+
         date_range_days = (graph["x.lim"][1] - graph["x.lim"][0]).days
-        horizontal_shift = pd.Timedelta(days=int(date_range_days * 0.01))  # ~1% of range
-        graph["text"].append({
-            "x": date + horizontal_shift,
-            "y": y_end + (10 if value >= 0 else -10),
-            "label": "PR",
-            "size": 8
-        })
+        horizontal_shift = pd.Timedelta(days=max(1, int(date_range_days * 0.01)))  # ~1% of range
+
+        graph["text"].append(
+            {
+                "x": date + horizontal_shift,
+                "y": y_end + (10 if value >= 0 else -10),
+                "label": "PR",
+                "size": 8,
+                "axis": "y2",  # FIX: ensure PR label is drawn on cashflow axis
+            }
+        )
         graph["events"].append("PR")
 
     return graph
+
 
 def add_outstanding_nominal_layer(graph, df):
     """
@@ -377,16 +518,19 @@ def add_outstanding_nominal_layer(graph, df):
         points.append({"x": date, "y": val, "scale": 1})
         prev_date, prev_val = date, val
 
-    graph["lines"].append({
-        "points": points,
-        "color": "red",
-        "linetype": "--",
-        "linewidth": 1.5
-    })
+    graph["lines"].append(
+        {
+            "points": points,
+            "color": "red",
+            "linetype": "--",
+            "linewidth": 1.5,
+        }
+    )
 
     graph["events"].append("nominalState")
 
     return graph
+
 
 def add_interest_accrual_layer(graph, df):
     """
@@ -421,15 +565,17 @@ def add_interest_accrual_layer(graph, df):
             if pending_segment:
                 # Add final segment to IP
                 prev_date, prev_val = pending_segment[-1]
-                segments.append({
-                    "points": [
-                        {"x": prev_date, "y": prev_val, "scale": scale},
-                        {"x": date, "y": val, "scale": scale}
-                    ],
-                    "color": "green",
-                    "linetype": "--",
-                    "linewidth": 1.2
-                })
+                segments.append(
+                    {
+                        "points": [
+                            {"x": prev_date, "y": prev_val, "scale": scale},
+                            {"x": date, "y": val, "scale": scale},
+                        ],
+                        "color": "green",
+                        "linetype": "--",
+                        "linewidth": 1.2,
+                    }
+                )
                 pending_segment = []
 
             # Start new accrual from 0 after IP
@@ -439,21 +585,24 @@ def add_interest_accrual_layer(graph, df):
             val = row["nominalAccrued"]
             if pending_segment:
                 prev_date, prev_val = pending_segment[-1]
-                segments.append({
-                    "points": [
-                        {"x": prev_date, "y": prev_val, "scale": scale},
-                        {"x": date, "y": val, "scale": scale}
-                    ],
-                    "color": "green",
-                    "linetype": "--",
-                    "linewidth": 1.2
-                })
+                segments.append(
+                    {
+                        "points": [
+                            {"x": prev_date, "y": prev_val, "scale": scale},
+                            {"x": date, "y": val, "scale": scale},
+                        ],
+                        "color": "green",
+                        "linetype": "--",
+                        "linewidth": 1.2,
+                    }
+                )
                 pending_segment.append((date, val))
 
     graph["lines"].extend(segments)
     graph["events"].append("interestAccrued")
 
     return graph
+
 
 def add_rr_cycle_wave_layer(graph, df):
     """
@@ -487,17 +636,18 @@ def add_rr_cycle_wave_layer(graph, df):
         horizontal_shift = pd.Timedelta(days=int(date_range_days * 0.01))  # ~1% x-range
 
         for _, row in rr_events.iterrows():
-            graph["text"].append({
-                "x": row["Date"] + horizontal_shift,
-                "y": label_height,
-                "label": "RR",
-                "size": 8
-            })
+            graph["text"].append(
+                {
+                    "x": row["Date"] + horizontal_shift,
+                    "y": label_height,
+                    "label": "RR",
+                    "size": 8,
+                }
+            )
 
         graph["events"].append("RR")
 
         return graph
-
 
     df = df.copy()
     df["Date"] = pd.to_datetime(df["time"])
@@ -517,25 +667,30 @@ def add_rr_cycle_wave_layer(graph, df):
         end_date = rr_events.iloc[i + 1]["Date"]
 
         total_seconds = (end_date - start_date).total_seconds()
-        times = [start_date + pd.Timedelta(seconds=total_seconds * t / (samples - 1))
-                 for t in range(samples)]
+        times = [
+            start_date + pd.Timedelta(seconds=total_seconds * t / (samples - 1))
+            for t in range(samples)
+        ]
 
         # Only use positive half of sine wave (0 → π)
         ys = [amplitude * np.sin(np.pi * t / (samples - 1)) for t in range(samples)]
         points = [{"x": t, "y": y, "scale": 1} for t, y in zip(times, ys)]
 
-        wave_lines.append({
-            "points": points,
-            "color": "lightgreen",
-            "linetype": "--",
-            "linewidth": 1.5
-        })
+        wave_lines.append(
+            {
+                "points": points,
+                "color": "lightgreen",
+                "linetype": "--",
+                "linewidth": 1.5,
+            }
+        )
 
     graph["lines"].extend(wave_lines)
     graph["events"].append("rrCycleWave")
     graph = annotate_rr_event_labels(graph, df)
 
     return graph
+
 
 def render_graph(graph, return_fig):
     """
@@ -548,36 +703,60 @@ def render_graph(graph, return_fig):
     ax2 = ax1.twinx()  # secondary Y axis for interest/cashflows
 
     # Baseline
-    ax1.axhline(0, color='black', linewidth=1)
+    ax1.axhline(0, color="black", linewidth=1)
     for line in graph.get("lines", []):
         xs = [p["x"] for p in line["points"]]
         ys = [p["y"] * p.get("scale", 1) for p in line["points"]]
         ax1.plot(xs, ys, color=line["color"], linestyle=line["linetype"], linewidth=line["linewidth"])
 
-    # Draw arrows
+    # # Draw arrows
+    # for arrow in graph["arrows"]:
+    #     color = arrow["color"]
+    #     event_type = arrow.get("label", "")  # optional
+    #     is_interest = color == "green"  # heuristic for now
+    #
+    #     axis = ax2 if is_interest else ax1
+    #     axis.annotate("",
+    #                 xy=(arrow["x1"], arrow["y1"]),
+    #                 xytext=(arrow["x0"], arrow["y0"]),
+    #                 arrowprops=dict(
+    #                     arrowstyle="->",
+    #                     color=color,
+    #                     lw=arrow["linewidth"],
+    #                     linestyle=arrow["linetype"]
+    #                 ))
+    #
+    # # Draw text
+    # for label in graph["text"]:
+    #     label_type = label["label"]
+    #     is_interest = label_type == "IP"
+    #     axis = ax2 if is_interest else ax1
+    #     axis.text(label["x"], label["y"], label["label"],
+    #             ha="center", va="bottom", fontsize=label["size"])
+
+    # Arrows (FIX: explicit axis routing via arrow["axis"])
     for arrow in graph["arrows"]:
-        color = arrow["color"]
-        event_type = arrow.get("label", "")  # optional
-        is_interest = color == "green"  # heuristic for now
+        axis_name = arrow.get("axis", "y1")
+        axis = ax2 if axis_name == "y2" else ax1
 
-        axis = ax2 if is_interest else ax1
-        axis.annotate("",
-                    xy=(arrow["x1"], arrow["y1"]),
-                    xytext=(arrow["x0"], arrow["y0"]),
-                    arrowprops=dict(
-                        arrowstyle="->",
-                        color=color,
-                        lw=arrow["linewidth"],
-                        linestyle=arrow["linetype"]
-                    ))
+        axis.annotate(
+            "",
+            xy=(arrow["x1"], arrow["y1"]),
+            xytext=(arrow["x0"], arrow["y0"]),
+            arrowprops=dict(
+                arrowstyle="->",
+                color=arrow["color"],
+                lw=arrow["linewidth"],
+                linestyle=arrow["linetype"],
+            ),
+        )
 
-    # Draw text
+    # Text (FIX: explicit axis routing via label["axis"])
     for label in graph["text"]:
-        label_type = label["label"]
-        is_interest = label_type == "IP"
-        axis = ax2 if is_interest else ax1
-        axis.text(label["x"], label["y"], label["label"],
-                ha="center", va="bottom", fontsize=label["size"])
+        axis_name = label.get("axis", "y1")
+        axis = ax2 if axis_name == "y2" else ax1
+
+        axis.text(label["x"], label["y"], label["label"], ha="center", va="bottom", fontsize=label["size"])
 
     # Axes setup
     ax1.set_xlim(graph["x.lim"])
@@ -590,7 +769,7 @@ def render_graph(graph, return_fig):
     ax1.set_title(graph["title"])
 
     # Format x-axis ticks
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     ax1.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
     fig.autofmt_xdate()
 
@@ -605,26 +784,34 @@ def render_graph(graph, return_fig):
 
     # X ticks
     ax1.set_xticks([xt["at"] for xt in graph["xlabels"]])
-    ax1.set_xticklabels([xt["label"] for xt in graph["xlabels"]], rotation=45, ha='right')
+    ax1.set_xticklabels([xt["label"] for xt in graph["xlabels"]], rotation=45, ha="right")
 
     plt.tight_layout()
     if return_fig:
         return fig
     else:
         plt.show()
-# final plot now for testing: 
-def contractPlot(df, contract_type, title=None, y1_label="Notional/Principal", y2_label="Interest Payments", return_fig=False):
+
+
+# final plot now for testing:
+def contractPlot(
+    df,
+    contract_type,
+    title=None,
+    y1_label="Notional/Principal",
+    y2_label="Interest Payments",
+    return_fig=False,
+):
     graph = initialize_graph(df, contract_type=contract_type, title=title, y1_label=y1_label, y2_label=y2_label)
 
     # Add layers
     graph = add_notional_payment_layer(graph, df)
     graph = add_interest_layer(graph, df)
+    graph = add_dividend_layer(graph, df)
     graph = add_redemption_layer(graph, df)
     graph = add_outstanding_nominal_layer(graph, df)
     graph = add_interest_accrual_layer(graph, df)
     graph = add_rr_cycle_wave_layer(graph, df)
+
     # Render the graph using matplotlib
     return render_graph(graph, return_fig)
-
-
-

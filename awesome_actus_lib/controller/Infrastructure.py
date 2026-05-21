@@ -272,6 +272,67 @@ class RiskService:
         response = requests.get(f"{self.serverURL}/findReferenceIndex/{riskFactorID}")
         response.raise_for_status()
         return response.json()
+    
+    def upload_deposit_withdrawl_model(self, riskFactorID: str, contractID: str, deposit_trxs: list[dict]):
+        payload = {
+            "riskFactorID": riskFactorID,
+            "contractDepositWfeeTrxs": [
+                {"contractID": contractID, "depositWfeeTrxs": deposit_trxs}
+            ],
+        }
+        response = requests.post(
+            url=f"{self.serverURL}/addDepositWfeeTrxModel",
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload),
+            timeout=30,
+        )
+
+        if response.status_code == 404:
+            raise NotImplementedError(
+                "RiskService endpoint '/addDepositWfeeTrxModel' is not available "
+                "on this risk-service instance."
+            )
+        response.raise_for_status()
+        return response.text
+
+    # def upload_two_dimensional_prepayment_model(
+    #     self,
+    #     riskFactorId: str,
+    #     referenceRateId: str,
+    #     prepaymentEventTimes: list[str],
+    #     surface: dict,
+    # ):
+    #     """
+    #     Upload a two-dimensional prepayment model.
+
+    #     Parameters:
+    #         riskFactorId: e.g. "ppm01"
+    #         referenceRateId: e.g. "ust5Y"
+    #         prepaymentEventTimes: list of ISO timestamps, e.g. ["2015-03-01T00:00:00", ...]
+    #         surface: dict with keys:
+    #             - interpolationMethod (e.g. "linear")
+    #             - extrapolationMethod (e.g. "constant")
+    #             - margins (list[dict], each with "dimension" and "values")
+    #             - data (2D list/array)
+
+    #     Returns:
+    #         str: response text
+    #     """
+    #     payload = {
+    #         "riskFactorId": riskFactorId,
+    #         "referenceRateId": referenceRateId,
+    #         "prepaymentEventTimes": prepaymentEventTimes,
+    #         "surface": surface,
+    #     }
+
+    #     response = requests.post(
+    #         url=f"{self.serverURL}/addTwoDimensionalPrepaymentModel",
+    #         headers={"Content-Type": "application/json"},
+    #         data=json.dumps(payload),
+    #         timeout=30,
+    #     )
+    #     response.raise_for_status()
+    #     return response.text
 
     # ---------- Scenarios ----------
 
