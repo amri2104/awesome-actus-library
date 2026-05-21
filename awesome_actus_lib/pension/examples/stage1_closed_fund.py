@@ -1,14 +1,24 @@
 """Stage 1 verification script — closed-fund BVG liability engine.
 
 Run from repo root:
-    python examples/stage1_closed_fund.py
+    python awesome_actus_lib/pension/examples/stage1_closed_fund.py
+    python awesome_actus_lib/pension/examples/stage1_closed_fund.py --no-plots
+
+Or as a module:
+    python -m awesome_actus_lib.pension.examples.stage1_closed_fund
 """
 
+import argparse
 from datetime import date
+from pathlib import Path
+import sys
 
 import pandas as pd
 
-from awesome_actus_lib import (
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from awesome_actus_lib.pension import (
     ClosedFundSimulator,
     Cohort,
     PensionFund,
@@ -16,6 +26,9 @@ from awesome_actus_lib import (
 )
 from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
 from awesome_actus_lib.analysis.value import ValueAnalysis
+from awesome_actus_lib.pension.analysis.plots import plot_all
+
+OUTPUT_DIR = Path(__file__).parent / "output"
 
 
 REQUIRED_COLS = {"time", "type", "payoff", "contractId"}
@@ -106,7 +119,22 @@ def test_schema_compat_with_aal_analyses() -> None:
     print(f"  [schema] ValueAnalysis NPV (flat 2%) = {val.npv:,.2f}")
 
 
+def _build_plot_fund() -> tuple:
+    """Mixed cohort fund used for illustrative plots."""
+    policy = PensionPolicy()
+    fund = PensionFund(policy=policy, start_date=date(2025, 1, 1))
+    fund.add_cohort(Cohort("COHORT_1990", 1990, 200, 90_000.0, 80_000.0))
+    fund.add_cohort(Cohort("COHORT_1970", 1970, 150, 110_000.0, 350_000.0))
+    fund.add_cohort(Cohort("COHORT_1955", 1955, 80, 0.0, 600_000.0))
+    cf = ClosedFundSimulator(fund).run(horizon_years=40)
+    return cf
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Stage 1 closed-fund verification")
+    parser.add_argument("--no-plots", action="store_true", help="Skip plot generation")
+    args = parser.parse_args()
+
     print("Stage 1 closed-fund verification")
     print("-" * 60)
     print("Test 1: single active cohort, AGH recurrence")
@@ -119,6 +147,12 @@ def main() -> None:
     test_schema_compat_with_aal_analyses()
     print()
     print("All Stage 1 checks passed.")
+
+    if not args.no_plots:
+        print()
+        print("Generating Stage 1 plots...")
+        cf = _build_plot_fund()
+        plot_all(cf.events_df, output_dir=OUTPUT_DIR, prefix="stage1")
 
 
 if __name__ == "__main__":

@@ -197,3 +197,5 @@ cython_debug/
 #  DS_Store files are created by macOS to store custom attributes of a folder.
 #  They can be safely ignored in version control.
 .DS_Store   
+# Generated plot output
+awesome_actus_lib/pension/examples/output/
