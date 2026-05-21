@@ -319,3 +319,90 @@ def plot_all_stage2(
         output_path=out / f"{prefix}_cumulative_comparison.png",
     )
     print(f"  [plots] saved 6 figures to {out}/")
+
+
+def plot_net_liquidity(
+    net_liq_df: pd.DataFrame,
+    output_path=None,
+    title: str = "Annual Net Liquidity: Assets vs Liabilities",
+) -> Optional[plt.Figure]:
+    """Grouped bar chart of asset and liability net cashflows per year with net line overlay.
+
+    Args:
+        net_liq_df: DataFrame from ALMAnalysis.net_liquidity(freq="YE"), with columns
+                    netLiquidity_assets, netLiquidity_liabilities, net.
+    """
+    df = net_liq_df.copy()
+    years = pd.to_datetime(df.index).year
+    x = np.arange(len(years))
+    width = 0.35
+
+    assets = df["netLiquidity_assets"].values
+    liabs = df["netLiquidity_liabilities"].values
+    net = df["net"].values
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    ax.bar(x - width / 2, assets, width, label="Assets (inflow)", color="#2CA02C", alpha=0.85)
+    ax.bar(x + width / 2, liabs, width, label="Liabilities (net)", color="#C0392B", alpha=0.85)
+    ax.plot(x, net, marker="o", markersize=3, linewidth=1.5, color="#333333", label="Net")
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.set_xticks(x[::5])
+    ax.set_xticklabels(years[::5], rotation=45, ha="right")
+    ax.yaxis.set_major_formatter(_CHF_FMT)
+    ax.set_title(title)
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Cashflow (CHF)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    return _save_or_return(fig, output_path)
+
+
+def plot_deckungsgrad_path(
+    deckungsgrad_series: pd.Series,
+    output_path=None,
+    title: str = "Deckungsgrad (Funding Ratio) Over Time",
+) -> Optional[plt.Figure]:
+    """Line chart of funding ratio over time with Swiss BVG reference thresholds.
+
+    Args:
+        deckungsgrad_series: pd.Series from ALMAnalysis.deckungsgrad_path(dates),
+                             index=DatetimeIndex, values=float (e.g. 1.12 = 112%).
+    """
+    dates = pd.to_datetime(deckungsgrad_series.index)
+    values = deckungsgrad_series.values * 100  # convert to percentage
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(dates, values, marker="o", markersize=5, linewidth=2.0, color="#4878CF", label="Deckungsgrad")
+    ax.axhline(100, color="black", linewidth=1.0, linestyle="--", label="100% (Volldeckung)")
+    ax.axhline(90, color="#E67E22", linewidth=0.8, linestyle=":", label="90% (Unterdeckung BVG)")
+
+    ax.fill_between(dates, values, 100,
+                    where=(values >= 100), alpha=0.12, color="#2CA02C")
+    ax.fill_between(dates, values, 100,
+                    where=(values < 100), alpha=0.15, color="#C0392B")
+
+    for d, v in zip(dates, values):
+        ax.annotate(f"{v:.0f}%", (d, v), textcoords="offset points",
+                    xytext=(0, 6), ha="center", fontsize=7)
+
+    ax.set_title(title)
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Funding Ratio (%)")
+    ax.legend(fontsize=8)
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    return _save_or_return(fig, output_path)
+
+
+def plot_alm_all(
+    net_liq_df: pd.DataFrame,
+    deckungsgrad_series: pd.Series,
+    output_dir,
+    prefix: str = "alm",
+) -> None:
+    """Save ALM plots (net liquidity + Deckungsgrad path) to *output_dir*."""
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    plot_net_liquidity(net_liq_df, output_path=out / f"{prefix}_net_liquidity.png")
+    plot_deckungsgrad_path(deckungsgrad_series, output_path=out / f"{prefix}_deckungsgrad_path.png")
+    print(f"  [plots] saved 2 ALM figures to {out}/")
