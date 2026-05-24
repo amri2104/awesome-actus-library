@@ -1,9 +1,9 @@
-"""pension_quickstart.py
+"""Stage2_pension_quickstart.py
 
 Working file — we build this up step by step.
 
 Run from the repo root:
-    .venv/bin/python awesome_actus_lib/pension/examples/pension_quickstart.py
+    .venv/bin/python awesome_actus_lib/pension/examples/Stage2_pension_quickstart.py
 """
 
 import os
@@ -115,9 +115,9 @@ print(f"  Total notional: CHF 100,000,000")
 service = PublicActusService()
 
 # =============================================================================
-# 1B. PORTFOLIO DEFINITION (liability side)  —  Stage 1: closed fund
+# 1B. PORTFOLIO DEFINITION (liability side)  —  Stage 2: open fund
 # =============================================================================
-print("\n[1B] Portfolio Definition — liabilities (Stage 1: closed fund)")
+print("\n[1B] Portfolio Definition — liabilities (Stage 2: open fund)")
 print("-" * 40)
 
 policy = PensionPolicy()
@@ -148,10 +148,18 @@ liability_fund.add_cohort(Cohort(
     accrued_savings=600_000.0,
 ))
 
+# Stage 2 addition: deterministic annual new entrants
+entry_policy = EntryPolicy(
+    entry_age=25,
+    headcount=20,
+    gross_salary=80_000.0,
+)
+
 print(f"  Cohort 1: 200 members, born 1990, AGH/head CHF 80,000")
 print(f"  Cohort 2: 150 members, born 1970, AGH/head CHF 350,000")
 print(f"  Cohort 3:  80 members, born 1955, AGH/head CHF 600,000")
-print(f"  Total members: 430  (closed fund — no new entrants)")
+print(f"  Total starting members: 430")
+print(f"  Entry policy: 20 new members/year, age 25, gross salary CHF 80,000")
 
 
 # =============================================================================
@@ -163,8 +171,16 @@ print("-" * 40)
 asset_cfs = service.generateEvents(asset_portfolio)
 print(f"  Asset CashFlowStream ready: {len(asset_cfs.events_df)} events")
 
-liability_cfs = ClosedFundSimulator(liability_fund).run(horizon_years=40)
+simulator = OpenFundSimulator(liability_fund, entry_policy)
+liability_cfs = simulator.run(horizon_years=40)
 print(f"  Liability CashFlowStream ready: {len(liability_cfs.events_df)} events")
+
+# Stage 2 extra: headcount evolution log
+headcount_df = pd.DataFrame(simulator.headcount_log)
+print(f"  Headcount @ year 1 :  active={headcount_df.iloc[0]['active']:>4}, "
+      f"retired={headcount_df.iloc[0]['retired']:>4}")
+print(f"  Headcount @ year 40:  active={headcount_df.iloc[-1]['active']:>4}, "
+      f"retired={headcount_df.iloc[-1]['retired']:>4}")
 
 # =============================================================================
 # 3. MERGING ASSETS AND LIABILITIES
@@ -254,14 +270,14 @@ ax1.bar(x, net_table["netLiquidity_liabilities"],
 ax1.bar([i + width for i in x], net_table["net"],
         width=width, label="Net", color="#264653")
 ax1.axhline(0, color="black", linewidth=0.6)
-ax1.set_title("Variant 1 — Net Liquidity per Year")
+ax1.set_title("Variant 1 — Net Liquidity per Year (Stage 2: open fund)")
 ax1.set_ylabel("CHF")
 ax1.set_xticks(list(x))
 ax1.set_xticklabels(years, rotation=45, ha="right")
 ax1.legend()
 ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig1, "stage1_v1_net_liquidity.png")
+_save(fig1, "stage2_v1_net_liquidity.png")
 
 # --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(2025, 2061, 5)]
@@ -270,19 +286,32 @@ fr_series = alm.deckungsgrad_path(fr_dates)
 fig2, ax2 = plt.subplots(figsize=(10, 4))
 ax2.plot(fr_series.index, fr_series.values, marker="o", color="#264653")
 ax2.axhline(1.0, color="red", linestyle="--", linewidth=0.8, label="100% coverage")
-ax2.set_title("Variant 2 — Funding Ratio Path")
+ax2.set_title("Variant 2 — Funding Ratio Path (Stage 2: open fund)")
 ax2.set_ylabel("Funding Ratio")
 ax2.set_xlabel("Valuation Date")
 ax2.grid(True, linestyle="--", alpha=0.5)
 ax2.legend()
 plt.tight_layout()
-_save(fig2, "stage1_v2_funding_ratio_path.png")
+_save(fig2, "stage2_v2_funding_ratio_path.png")
 
 # --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
-fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows",
+fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows (Stage 2)",
                          return_fig=True)
 if fig3 is not None:
-    _save(fig3, "stage1_v3_combined_cashflows.png")
+    _save(fig3, "stage2_v3_combined_cashflows.png")
+
+# --- Plot 4 (Stage 2 specific): Headcount evolution ----------------------
+fig4, ax4 = plt.subplots(figsize=(12, 5))
+ax4.plot(headcount_df["year"], headcount_df["active"], marker="o",
+         label="Active", color="#2a9d8f")
+ax4.plot(headcount_df["year"], headcount_df["retired"], marker="s",
+         label="Retired", color="#e76f51")
+ax4.set_title("Stage 2 — Headcount Evolution (active vs retired)")
+ax4.set_ylabel("Members")
+ax4.set_xlabel("Year")
+ax4.grid(True, linestyle="--", alpha=0.5)
+ax4.legend()
+plt.tight_layout()
+_save(fig4, "stage2_v4_headcount_evolution.png")
 
 plt.show()
-

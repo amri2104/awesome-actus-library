@@ -8,7 +8,7 @@ from ...models.cashFlowStream import CashFlowStream
 from ..cohort import Cohort
 from ..entry import EntryPolicy
 from ..fund import _DummyPortfolio, PensionFund
-from .closed import ClosedFundSimulator
+from .Stage1_closed import ClosedFundSimulator
 
 
 class OpenFundSimulator(ClosedFundSimulator):

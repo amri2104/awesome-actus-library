@@ -4,7 +4,7 @@
 - Stage 2: OpenFundSimulator   (open fund, deterministic new entrants)
 """
 
-from .closed import ClosedFundSimulator
-from .open import OpenFundSimulator
+from .Stage1_closed import ClosedFundSimulator
+from .Stage2_open import OpenFundSimulator
 
 __all__ = ["ClosedFundSimulator", "OpenFundSimulator"]
