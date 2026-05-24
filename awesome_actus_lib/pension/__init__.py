@@ -3,7 +3,7 @@ from .cohort import Cohort
 from .entry import EntryPolicy
 from .fund import PensionFund
 from .policy import PensionPolicy
-from .simulator import ClosedFundSimulator, OpenFundSimulator
+from .simulators import ClosedFundSimulator, OpenFundSimulator
 
 __all__ = [
     "PensionPolicy",

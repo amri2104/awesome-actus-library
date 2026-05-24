@@ -18,7 +18,7 @@ def portfolioPlot(events_df, title="Portfolio Cashflows", y1_label="Payoff", ret
         return
 
     df = df.copy()
-    df["Date"] = pd.to_datetime(df["time"])
+    df["Date"] = pd.to_datetime(df["time"], format="ISO8601")
     df = df[["Date", "type", "payoff"]].dropna()
     df = df[df["payoff"] != 0]
 

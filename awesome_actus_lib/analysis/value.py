@@ -73,14 +73,14 @@ class ValueAnalysis(Analysis):
 
     def _compute_nominal_value(self):
         df = self.events_df.copy()
-        df["time"] = pd.to_datetime(df["time"])
+        df["time"] = pd.to_datetime(df["time"], format="ISO8601")
         df = df[df["time"] >= self.as_of_date]
         df["payoff"] = pd.to_numeric(df["payoff"], errors="coerce").fillna(0)
         return df["payoff"].sum()
 
     def _compute_discounted_value(self):
         df = self.events_df.copy()
-        df["time"] = pd.to_datetime(df["time"])
+        df["time"] = pd.to_datetime(df["time"], format="ISO8601")
         df = df[df["time"] >= self.as_of_date].copy()
         df["payoff"] = pd.to_numeric(df["payoff"], errors="coerce").fillna(0)
 
@@ -121,7 +121,7 @@ class ValueAnalysis(Analysis):
 
         # Fallback to flat rate
         if self.flat_rate is not None:
-            print(f"[ValueAnalysis] ℹ️ Using fallback flat rate of {self.flat_rate:.2%} for discounting.")
+            print(f"[ValueAnalysis] Using fallback flat rate of {self.flat_rate:.2%} for discounting.")
             df["t"] = (df["time"] - self.as_of_date).dt.days / 365.0
             df["rate"] = self.flat_rate
             df["df"] = np.exp(-self.flat_rate * df["t"])

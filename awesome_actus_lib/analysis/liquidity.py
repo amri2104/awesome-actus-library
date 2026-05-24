@@ -11,7 +11,7 @@ class LiquidityAnalysis(Analysis):
 
     def analyze(self, freq: str = "M", start: pd.Timestamp = None, end: pd.Timestamp = None) -> pd.DataFrame:
         df = self.events_df.copy()
-        df["time"] = pd.to_datetime(df["time"])
+        df["time"] = pd.to_datetime(df["time"], format="ISO8601")
         df["payoff"] = pd.to_numeric(df["payoff"], errors="coerce").fillna(0)
 
         if start is None:
