@@ -12,8 +12,7 @@ import sys
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Path setup: lets you run this file directly from the examples/ folder
-# without installing the package.
+# Path setup
 # ---------------------------------------------------------------------------
 try:
     # Asset side (plain AAL) + the analysis tools

@@ -2,12 +2,13 @@
 
 from copy import deepcopy
 from datetime import date
-from typing import List
+from typing import List, Optional
 
 from ...models.cashFlowStream import CashFlowStream
 from ..cohort import Cohort
 from ..entry import EntryPolicy
 from ..fund import _DummyPortfolio, PensionFund
+from ..mortality import MortalityTable
 from .Stage1_closed import ClosedFundSimulator
 
 
@@ -19,11 +20,16 @@ class OpenFundSimulator(ClosedFundSimulator):
     machinery handles contributions, retirement, and pensions identically for
     both original and new-entrant cohorts.
 
-    After run(), headcount_log contains per-year active/retired headcounts.
+    After run(), headcount_log contains per-year active/retired headcounts
+    (aggregated), and cohort_headcount_log contains per-cohort per-year
+    headcount (inherited from ClosedFundSimulator).
+
+    Optional Stage 3 mortality: see ClosedFundSimulator.
     """
 
-    def __init__(self, fund: PensionFund, entry_policy: EntryPolicy):
-        super().__init__(fund)
+    def __init__(self, fund: PensionFund, entry_policy: EntryPolicy,
+                 mortality: Optional[MortalityTable] = None):
+        super().__init__(fund, mortality=mortality)
         self.entry_policy = entry_policy
         self.headcount_log: List[dict] = []
 
@@ -33,6 +39,7 @@ class OpenFundSimulator(ClosedFundSimulator):
         policy = self.fund.policy
         start = self.fund.start_date
         self.headcount_log = []
+        self.cohort_headcount_log = []
 
         for year_offset in range(horizon_years):
             sim_year = start.year + year_offset
@@ -45,6 +52,7 @@ class OpenFundSimulator(ClosedFundSimulator):
                 headcount=ep.headcount,
                 gross_salary=ep.gross_salary,
                 accrued_savings=0.0,
+                gender=ep.gender,
             )
             cohorts.append(new_cohort)
             per_contract_events[new_cohort.cohort_id] = []
@@ -60,6 +68,13 @@ class OpenFundSimulator(ClosedFundSimulator):
                     sink=per_contract_events[cohort.cohort_id],
                     policy=policy,
                 )
+                self._apply_mortality(cohort, age)
+                self.cohort_headcount_log.append({
+                    "year": sim_year,
+                    "cohort_id": cohort.cohort_id,
+                    "headcount": cohort.headcount,
+                    "status": cohort.status,
+                })
 
             active_hc = sum(
                 c.headcount for c in cohorts
