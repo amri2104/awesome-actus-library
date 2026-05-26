@@ -4,7 +4,7 @@ Period mortality table EK 2001-2005 (Swiss pension-actuarial reference,
 "Erfahrungstafeln Kollektivversicherung", evaluation period 2001-2005).
 Constants below are extracted once from
 
-    awesome_actus_lib/pension/Ü1.6_EK 95 + EK 0105 -Tafeln_formatiert_MUSTERLÖSUNG.xlsx
+    awesome_actus_lib/pension/mortality_tables_EK.xlsx
 
 sheets "EKM 0105" (men) and "EKF 0105" (women), columns ``x`` and ``qx``
 (one-year death probability). The other sheets (EKM 95, EKF 95,

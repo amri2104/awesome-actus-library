@@ -68,7 +68,7 @@ Method `survival_probability(age, gender) -> float` returns
 
 Factory returning the **EK 2001–2005 period table** with hardcoded
 `q_x` extracted from
-`awesome_actus_lib/pension/Ü1.6_EK 95 + EK 0105 -Tafeln_formatiert_MUSTERLÖSUNG.xlsx`,
+`awesome_actus_lib/pension/mortality_tables_EK.xlsx`,
 sheets `EKM 0105` (men) and `EKF 0105` (women), columns `x` and
 `qx` only. Everything else in that workbook (commutation columns,
 the older EKM 95 / EKF 95 sheets, the `qx-Grafiken` sheet, the
