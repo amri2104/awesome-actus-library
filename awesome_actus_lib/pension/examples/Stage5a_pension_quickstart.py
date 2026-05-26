@@ -607,6 +607,28 @@ assert rel_j < 0.20, (
 print(f"  (j) DG @ t0 MC mean = {dg_t0_mc:.4f} vs deterministic = {dg_t0_det:.4f} "
       f"(rel {rel_j:.2%}). OK.")
 
+# (k) Maturing tranche must move bond->cash, not bond->void.
+# Between consecutive Stichtage, mean Vorsorgevermögen must not collapse
+# by more than 30%. A bond maturing within the interval converts to par cash
+# (CSH account), so total VV evolves smoothly rather than dropping by the
+# notional. Without the CSH cash account, VV drops by the full notional of
+# any maturing tranche — that artefact is what assert (k) guards against.
+vv_means = []
+years_sorted = sorted(val_years)
+for y in years_sorted:
+    vv_means.append(float(np.mean(dg_path[dg_path["year"] == y]["vv"])))
+for i in range(1, len(years_sorted)):
+    y_prev, y_curr = years_sorted[i - 1], years_sorted[i]
+    vv_prev, vv_curr = vv_means[i - 1], vv_means[i]
+    rel_drop = (vv_prev - vv_curr) / (abs(vv_prev) + 1e-30)
+    assert rel_drop < 0.30, (
+        f"(k) Vorsorgevermögen collapse between {y_prev}->{y_curr}: "
+        f"{vv_prev:,.0f} -> {vv_curr:,.0f} (drop {rel_drop:.2%}). "
+        f"Maturing tranche likely lost to void instead of cash."
+    )
+print(f"  (k) Smooth VV evolution across {years_sorted}: "
+      f"max consecutive drop < 30%. OK.")
+
 
 # =============================================================================
 # 4. PLOTS — Stage 5a-specific (Stage 4 plots intentionally not duplicated)

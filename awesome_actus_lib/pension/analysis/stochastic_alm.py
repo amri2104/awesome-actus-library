@@ -9,11 +9,19 @@ Two analytics:
   - t0 NPV distributions for assets and liabilities, using the
     path-integrated short rate exp(-Σ r_path(t_j) Δt).
   - DG-Pfad at multiple valuation dates t*:
-      Vorsorgevermögen(t*, path) = Σ remaining asset CF_k × P_HW(t*, t_k; r_t*^path)
+      Vorsorgevermögen(t*, path) = CSH_cash(t*)
+                                       [par, flat, path-independent,
+                                        = Σ pre-t* fund cashflows
+                                          (asset + liability, native signs)]
+                                 + Σ_{t_k >= t*} asset_CF_k · P_HW(t*, t_k; r_t*^path)
       Vorsorgekapital(t*)        = Σ active AGH(t*)×hc(t*)
                                  + Σ retired pension(t*)×hc(t*) × ä_age(t*)
                                   [flat policy.technical_rate — Option α]
     DG(t*, path) = Vorsorgevermögen / Vorsorgekapital
+
+    Flat cash = deliberate no-reinvestment assumption: pre-t* fund
+    cashflows accumulate at par with zero growth. Future stage could
+    layer a deposit rate on the cash account.
 """
 
 from __future__ import annotations
@@ -25,6 +33,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from ...models.CSH_gen import CSH
 from ...models.cashFlowStream import CashFlowStream
 from ...stochastic_rates.models.base import ShortRateModel
 from ...stochastic_rates.simulation import SimulationResult
@@ -274,27 +283,66 @@ class StochasticALMAnalysis:
         return vk
 
     def _vorsorgevermoegen_at(self, year: int, r_t_paths: np.ndarray) -> np.ndarray:
+        """Vorsorgevermögen(t*, path) = CSH_cash(t*) + MV_remaining_bonds(t*, path).
+
+        CSH_cash(t*) — par, flat, path-independent. Sum of ALL fund cashflows
+        that occurred strictly BEFORE t*, native payoff signs:
+          + asset CF (received bond coupons + matured principals)
+          + liability CF (contributions positive, pensions/admin negative)
+        RISK_CONTRIB is included as real cash received; the model-wide
+        asymmetry (no offsetting risk-benefit outflow) is inherited uniformly
+        here and is documented elsewhere. Represented as an ACTUS CSH
+        contract for portfolio completeness — its notionalPrincipal IS the
+        par cash term used in VV.
+
+        MV_remaining_bonds(t*, path) — path-dependent. Cashflows with
+        event_time_years >= t* priced via HullWhite.zcb_price(t*, t_k, r_t*^path).
+        A cashflow exactly at t* counts as remaining (zcb_price(t*,t*)=1=par),
+        so the partition is clean.
+
+        At t* = base_year cash = 0 (no pre-t0 flows), so VV(t0) is unchanged
+        relative to the original implementation.
+        """
         base_year = self.base_date.year
         t_star = float(year - base_year)
-        df = self.asset_cf.events_df
-        df = df[df["payoff"] != 0.0]
-        if df.empty:
-            return np.zeros_like(r_t_paths)
-        et = self._event_times_years(df)
-        po = df["payoff"].astype(float).values
-        mask = et >= t_star
-        et_r = et[mask]
-        po_r = po[mask]
-        if len(et_r) == 0:
-            return np.zeros_like(r_t_paths)
-        vv = np.zeros(len(r_t_paths))
-        for k, t_k in enumerate(et_r):
-            zcb_paths = np.array([
-                self.model.zcb_price(t_star, float(t_k), r_t=float(r))
-                for r in r_t_paths
-            ])
-            vv += po_r[k] * zcb_paths
-        return vv
+
+        # --- 1) CSH cash account (par, flat, path-independent) -----------
+        a_df = self.asset_cf.events_df
+        a_df = a_df[a_df["payoff"] != 0.0]
+        a_et = self._event_times_years(a_df) if not a_df.empty else np.array([])
+        a_po = a_df["payoff"].astype(float).values if not a_df.empty else np.array([])
+
+        l_df = self.liability_cf.events_df
+        l_df = l_df[l_df["payoff"] != 0.0]
+        l_et = self._event_times_years(l_df) if not l_df.empty else np.array([])
+        l_po = l_df["payoff"].astype(float).values if not l_df.empty else np.array([])
+
+        cash = float(np.sum(a_po[a_et < t_star])) + float(np.sum(l_po[l_et < t_star]))
+
+        cash_csh = CSH(
+            contractID=f"CASH_{year}",
+            contractRole="RPA",
+            creatorID="PK_ALM",
+            currency="CHF",
+            notionalPrincipal=cash,
+            statusDate=f"{year}-01-01T00:00:00",
+        )
+        cash_par = float(cash_csh.terms["notionalPrincipal"].value)
+
+        # --- 2) MV of remaining bonds (path-dependent) -------------------
+        mv = np.zeros(len(r_t_paths))
+        if a_et.size:
+            mask = a_et >= t_star
+            et_r = a_et[mask]
+            po_r = a_po[mask]
+            for k, t_k in enumerate(et_r):
+                zcb_paths = np.array([
+                    self.model.zcb_price(t_star, float(t_k), r_t=float(r))
+                    for r in r_t_paths
+                ])
+                mv += po_r[k] * zcb_paths
+
+        return cash_par + mv
 
     def deckungsgrad_path(self, valuation_years: Sequence[int]) -> pd.DataFrame:
         base_year = self.base_date.year
