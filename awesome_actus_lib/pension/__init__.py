@@ -5,6 +5,7 @@ from .analysis.conversion import (
     technical_uws,
 )
 from .analysis.deckungsgrad import DeckungsgradAnalysis
+from .analysis.stochastic_alm import FundProjection, StochasticALMAnalysis
 from .cohort import Cohort
 from .entry import EntryPolicy
 from .fund import PensionFund
@@ -29,6 +30,8 @@ __all__ = [
     "ALMAnalysis",
     "DeckungsgradAnalysis",
     "PensionierungsverlustAnalysis",
+    "FundProjection",
+    "StochasticALMAnalysis",
     "annuity_due",
     "technical_uws",
     "MortalityTable",

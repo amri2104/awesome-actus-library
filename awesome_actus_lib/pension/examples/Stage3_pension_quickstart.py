@@ -1,55 +1,30 @@
 """Stage3_pension_quickstart.py
 
-Working file — we build this up step by step.
-
-Run from the repo root:
-    .venv/bin/python awesome_actus_lib/pension/examples/Stage3_pension_quickstart.py
+Stage 3 — deterministic retiree mortality (EK 2001-2005):
+  - MortalityTable + ek2001_2005() factory (Swiss period table)
+  - Cohort.gender + EntryPolicy.gender (opt-in, default "unisex")
+  - Optional mortality= parameter on ClosedFundSimulator/OpenFundSimulator
+  - cohort_headcount_log (per-cohort headcount decay over time)
 """
 
 import os
-import sys
 
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Path setup.
-# ---------------------------------------------------------------------------
-try:
-    # Asset side (plain AAL) + the analysis tools
-    from awesome_actus_lib import PAM, Portfolio, PublicActusService
-    from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-    from awesome_actus_lib.analysis.value import ValueAnalysis
-
-    # Liability side (the pension extension) — the user-facing classes
-    from awesome_actus_lib.pension import (
-        PensionPolicy,
-        Cohort,
-        PensionFund,
-        ClosedFundSimulator,
-        OpenFundSimulator,
-        EntryPolicy,
-        ALMAnalysis,
-        MortalityTable,
-        ek2001_2005,
-    )
-except ImportError:
-    _pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-    if _pkg_root not in sys.path:
-        sys.path.insert(0, _pkg_root)
-    from awesome_actus_lib import PAM, Portfolio, PublicActusService
-    from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-    from awesome_actus_lib.analysis.value import ValueAnalysis
-    from awesome_actus_lib.pension import (
-        PensionPolicy,
-        Cohort,
-        PensionFund,
-        ClosedFundSimulator,
-        OpenFundSimulator,
-        EntryPolicy,
-        ALMAnalysis,
-        MortalityTable,
-        ek2001_2005,
-    )
+from awesome_actus_lib import PAM, Portfolio, PublicActusService
+from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
+from awesome_actus_lib.analysis.value import ValueAnalysis
+from awesome_actus_lib.pension import (
+    PensionPolicy,
+    Cohort,
+    PensionFund,
+    ClosedFundSimulator,
+    OpenFundSimulator,
+    EntryPolicy,
+    ALMAnalysis,
+    MortalityTable,
+    ek2001_2005,
+)
 
 
 print("=" * 70)
@@ -252,7 +227,7 @@ print("-" * 40)
 
 import matplotlib.pyplot as plt
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures")
+_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage3")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 
@@ -281,7 +256,7 @@ ax1.set_xticklabels(years, rotation=45, ha="right")
 ax1.legend()
 ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig1, "stage3_v1_net_liquidity.png")
+_save(fig1, "v1_net_liquidity.png")
 
 # --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(2025, 2061, 5)]
@@ -296,13 +271,13 @@ ax2.set_xlabel("Valuation Date")
 ax2.grid(True, linestyle="--", alpha=0.5)
 ax2.legend()
 plt.tight_layout()
-_save(fig2, "stage3_v2_funding_ratio_path.png")
+_save(fig2, "v2_funding_ratio_path.png")
 
 # --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
 fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows (Stage 3)",
                          return_fig=True)
 if fig3 is not None:
-    _save(fig3, "stage3_v3_combined_cashflows.png")
+    _save(fig3, "v3_combined_cashflows.png")
 
 # --- Plot 5 (Stage 3 specific): Cohort headcount decline ------------------
 fig5, ax5 = plt.subplots(figsize=(12, 5))
@@ -317,6 +292,6 @@ ax5.set_xlabel("Year")
 ax5.grid(True, linestyle="--", alpha=0.5)
 ax5.legend()
 plt.tight_layout()
-_save(fig5, "stage3_v5_cohort_headcount_decline.png")
+_save(fig5, "v5_cohort_headcount_decline.png")
 
 plt.show()

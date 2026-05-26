@@ -5,66 +5,32 @@ Stage 4 — deterministic time-varying parameters on top of Stage 1/2/3:
   - falling applied UWS path (per retirement year)
   - BVG-threshold indexation in k-year steps
   - PensionierungsverlustAnalysis (applied UWS vs technical UWS = 1/ä_x)
-
-Run from the repo root:
-    .venv/bin/python awesome_actus_lib/pension/examples/Stage4_pension_quickstart.py
 """
 
 import os
-import sys
 
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Path setup: lets you run this file directly from the examples/ folder
-# without installing the package.
-# ---------------------------------------------------------------------------
-try:
-    from awesome_actus_lib import PAM, Portfolio, PublicActusService
-    from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-    from awesome_actus_lib.analysis.value import ValueAnalysis
-
-    from awesome_actus_lib.pension import (
-        PensionPolicy,
-        Cohort,
-        PensionFund,
-        ClosedFundSimulator,
-        OpenFundSimulator,
-        DynamicFundSimulator,
-        Stage4Dynamics,
-        EntryPolicy,
-        ALMAnalysis,
-        DeckungsgradAnalysis,
-        PensionierungsverlustAnalysis,
-        annuity_due,
-        technical_uws,
-        MortalityTable,
-        ek2001_2005,
-    )
-except ImportError:
-    _pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-    if _pkg_root not in sys.path:
-        sys.path.insert(0, _pkg_root)
-    from awesome_actus_lib import PAM, Portfolio, PublicActusService
-    from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-    from awesome_actus_lib.analysis.value import ValueAnalysis
-    from awesome_actus_lib.pension import (
-        PensionPolicy,
-        Cohort,
-        PensionFund,
-        ClosedFundSimulator,
-        OpenFundSimulator,
-        DynamicFundSimulator,
-        Stage4Dynamics,
-        EntryPolicy,
-        ALMAnalysis,
-        DeckungsgradAnalysis,
-        PensionierungsverlustAnalysis,
-        annuity_due,
-        technical_uws,
-        MortalityTable,
-        ek2001_2005,
-    )
+from awesome_actus_lib import PAM, Portfolio, PublicActusService
+from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
+from awesome_actus_lib.analysis.value import ValueAnalysis
+from awesome_actus_lib.pension import (
+    PensionPolicy,
+    Cohort,
+    PensionFund,
+    ClosedFundSimulator,
+    OpenFundSimulator,
+    DynamicFundSimulator,
+    Stage4Dynamics,
+    EntryPolicy,
+    ALMAnalysis,
+    DeckungsgradAnalysis,
+    PensionierungsverlustAnalysis,
+    annuity_due,
+    technical_uws,
+    MortalityTable,
+    ek2001_2005,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -100,49 +66,77 @@ liability_fund = PensionFund(
 # AGH per capita scales roughly with age (more accrual = older cohort).
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1960",  # retires 2025 (Variant B: auto-conv at year 1)
-    birth_year=1960, headcount=90,
-    gross_salary=120_000.0, accrued_savings=600_000.0, gender="unisex",
+    birth_year=1960,
+    headcount=90,
+    gross_salary=120_000.0,
+    accrued_savings=600_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1963",  # retires 2028
-    birth_year=1963, headcount=100,
-    gross_salary=115_000.0, accrued_savings=520_000.0, gender="unisex",
+    birth_year=1963,
+    headcount=100,
+    gross_salary=115_000.0,
+    accrued_savings=520_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1966",  # retires 2031
-    birth_year=1966, headcount=110,
-    gross_salary=115_000.0, accrued_savings=450_000.0, gender="unisex",
+    birth_year=1966,
+    headcount=110,
+    gross_salary=115_000.0,
+    accrued_savings=450_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1970",  # retires 2035
-    birth_year=1970, headcount=150,
-    gross_salary=110_000.0, accrued_savings=350_000.0, gender="unisex",
+    birth_year=1970,
+    headcount=150,
+    gross_salary=110_000.0,
+    accrued_savings=350_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1972",  # retires 2037
-    birth_year=1972, headcount=130,
-    gross_salary=108_000.0, accrued_savings=320_000.0, gender="unisex",
+    birth_year=1972,
+    headcount=130,
+    gross_salary=108_000.0,
+    accrued_savings=320_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1975",  # retires 2040
-    birth_year=1975, headcount=140,
-    gross_salary=105_000.0, accrued_savings=270_000.0, gender="unisex",
+    birth_year=1975,
+    headcount=140,
+    gross_salary=105_000.0,
+    accrued_savings=270_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1978",  # retires 2043
-    birth_year=1978, headcount=140,
-    gross_salary=100_000.0, accrued_savings=220_000.0, gender="unisex",
+    birth_year=1978,
+    headcount=140,
+    gross_salary=100_000.0,
+    accrued_savings=220_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1990",  # retires 2055
-    birth_year=1990, headcount=200,
-    gross_salary=90_000.0, accrued_savings=80_000.0, gender="unisex",
+    birth_year=1990,
+    headcount=200,
+    gross_salary=90_000.0,
+    accrued_savings=80_000.0,
+    gender="unisex",
 ))
 liability_fund.add_cohort(Cohort(
     cohort_id="RETIRED_1955",
-    birth_year=1955, headcount=80,
-    gross_salary=0.0, accrued_savings=0.0,
-    status="retired", annual_pension=31_380.0, gender="f",
+    birth_year=1955,
+    headcount=80,
+    gross_salary=0.0,
+    accrued_savings=0.0,
+    status="retired",
+    annual_pension=31_380.0,
+    gender="f",
 ))
 
 entry_policy = EntryPolicy(
@@ -465,7 +459,10 @@ print(f"  (a2) annuity_due(100, 'm', EK0105, term=100) = {a_deg:.12f} (=1.0). OK
 # --- (a3) Diskontierung UND Mortalitätsgewichtung handgerechnet --------------
 # tbl: q_0 = 0.5, q_1 = 0.0; i = 10%; age=0, term=1 ⇒ K=1
 # ä = v^0*1 + v^1*(1-0.5) = 1 + (1/1.1)*0.5 = 1.4545454545454...
-tbl = MortalityTable(q_male={0: 0.5, 1: 0.0}, q_female={0: 0.5, 1: 0.0})
+tbl = MortalityTable(
+    q_male={0: 0.5, 1: 0.0},
+    q_female={0: 0.5, 1: 0.0},
+)
 a3 = annuity_due(0, "m", 0.10, tbl, 1)
 assert abs(a3 - 1.4545454545454546) < 1e-12, f"(a3) annuity_due failed: {a3}"
 print(f"  (a3) annuity_due(0,'m',i=10%,q0=0.5,term=1) = {a3:.12f} (=1.454545..., exakt). OK.")
@@ -503,8 +500,16 @@ assert rel < 1e-9, (
 print(f"  (b) Σ payoff Stage4-neutral={sum_s4:,.2f} == Stage3={sum_s3:,.2f} "
       f"(rel. diff {rel:.2e}). OK.")
 
-alm_s4n = ALMAnalysis(asset_cfs, cf_stage4_neutral, flat_rate=policy.technical_rate)
-alm_s3 = ALMAnalysis(asset_cfs, cf_stage3, flat_rate=policy.technical_rate)
+alm_s4n = ALMAnalysis(
+    assets_cf=asset_cfs,
+    liabilities_cf=cf_stage4_neutral,
+    flat_rate=policy.technical_rate,
+)
+alm_s3 = ALMAnalysis(
+    assets_cf=asset_cfs,
+    liabilities_cf=cf_stage3,
+    flat_rate=policy.technical_rate,
+)
 fr_s4n = alm_s4n.funding_ratio("2025-01-01")
 fr_s3 = alm_s3.funding_ratio("2025-01-01")
 rel_fr = abs(fr_s4n - fr_s3) / (abs(fr_s3) + 1e-30)
@@ -540,13 +545,22 @@ print(f"  (c3) Σ BASELINE {base_total:,.2f} <= Σ STRESS {stress_total:,.2f}. O
 
 # --- (d) DeckungsgradAnalysis single-cohort sanity ---------------------------
 # Only-active fund, AGH=100k, hc=10 -> vorsorgekapital_t0() = 1_000_000 exakt.
-solo_fund = PensionFund(policy=policy, start_date=START_DATE)
+solo_fund = PensionFund(
+    policy=policy,
+    start_date=START_DATE,
+)
 solo_fund.add_cohort(Cohort(
-    cohort_id="SOLO", birth_year=1990, headcount=10,
-    gross_salary=80_000.0, accrued_savings=100_000.0, gender="unisex",
+    cohort_id="SOLO",
+    birth_year=1990,
+    headcount=10,
+    gross_salary=80_000.0,
+    accrued_savings=100_000.0,
+    gender="unisex",
 ))
 vk_solo = DeckungsgradAnalysis(
-    fund=solo_fund, mortality=None, vorsorgevermoegen=0.0,
+    fund=solo_fund,
+    mortality=None,
+    vorsorgevermoegen=0.0,
 ).vorsorgekapital_t0()
 assert vk_solo == 1_000_000.0, f"(d) single-cohort VK failed: {vk_solo}"
 print(f"  (d) VK(only-active, AGH=100k, hc=10) = {vk_solo:,.2f} (=1,000,000). OK.")
@@ -582,7 +596,7 @@ print("-" * 40)
 
 import matplotlib.pyplot as plt
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures")
+_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage4")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 
@@ -611,7 +625,7 @@ ax1.set_xticklabels(years, rotation=45, ha="right")
 ax1.legend()
 ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig1, "stage4_v1_net_liquidity.png")
+_save(fig1, "v1_net_liquidity.png")
 
 # --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
@@ -626,13 +640,13 @@ ax2.set_xlabel("Valuation Date")
 ax2.grid(True, linestyle="--", alpha=0.5)
 ax2.legend()
 plt.tight_layout()
-_save(fig2, "stage4_v2_funding_ratio_path.png")
+_save(fig2, "v2_funding_ratio_path.png")
 
 # --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
 fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows (Stage 4)",
                          return_fig=True)
 if fig3 is not None:
-    _save(fig3, "stage4_v3_combined_cashflows.png")
+    _save(fig3, "v3_combined_cashflows.png")
 
 # --- Plot 4: Cohort headcount decline (Stage 3 inheritance) --------------
 fig4, ax4 = plt.subplots(figsize=(12, 5))
@@ -648,7 +662,7 @@ ax4.set_xlabel("Year")
 ax4.grid(True, linestyle="--", alpha=0.5)
 ax4.legend()
 plt.tight_layout()
-_save(fig4, "stage4_v4_cohort_headcount_decline.png")
+_save(fig4, "v4_cohort_headcount_decline.png")
 
 # --- Plot 5 (Stage 4 specific): UWS path — applied vs technical ----------
 fig5, ax5 = plt.subplots(figsize=(11, 5))
@@ -665,7 +679,7 @@ ax5.set_xlabel("Pensionierungsjahr")
 ax5.grid(True, linestyle="--", alpha=0.5)
 ax5.legend()
 plt.tight_layout()
-_save(fig5, "stage4_v5_uws_path.png")
+_save(fig5, "v5_uws_path.png")
 
 # --- Plot 6 (Stage 4 specific): Pensionierungsverlust per Jahr ----------
 fig6, ax6 = plt.subplots(figsize=(11, 5))
@@ -678,6 +692,6 @@ ax6.set_ylabel("Verlust in CHF")
 ax6.set_xlabel("Pensionierungsjahr")
 ax6.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig6, "stage4_v6_pensionierungsverlust_per_year.png")
+_save(fig6, "v6_pensionierungsverlust_per_year.png")
 
 plt.show()

@@ -1,55 +1,32 @@
 """Stage2_pension_quickstart.py
 
-Working file — we build this up step by step.
-
-Run from the repo root:
-    .venv/bin/python awesome_actus_lib/pension/examples/Stage2_pension_quickstart.py
+Stage 2 — open fund with deterministic new entrants:
+  - EntryPolicy (single entrant archetype per year)
+  - OpenFundSimulator (subclass of ClosedFundSimulator)
+  - headcount_log diagnostic (per-year active/retired totals)
 """
 
 import os
-import sys
 
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Path setup
-# ---------------------------------------------------------------------------
-try:
-    # Asset side (plain AAL) + the analysis tools
-    from awesome_actus_lib import PAM, Portfolio, PublicActusService
-    from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-    from awesome_actus_lib.analysis.value import ValueAnalysis
-
-    # Liability side (the pension extension) — the 7 user-facing classes
-    from awesome_actus_lib.pension import (
-        PensionPolicy,
-        Cohort,
-        PensionFund,
-        ClosedFundSimulator,
-        OpenFundSimulator,
-        EntryPolicy,
-        ALMAnalysis,
-    )
-except ImportError:
-    _pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
-    if _pkg_root not in sys.path:
-        sys.path.insert(0, _pkg_root)
-    from awesome_actus_lib import PAM, Portfolio, PublicActusService
-    from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-    from awesome_actus_lib.analysis.value import ValueAnalysis
-    from awesome_actus_lib.pension import (
-        PensionPolicy,
-        Cohort,
-        PensionFund,
-        ClosedFundSimulator,
-        OpenFundSimulator,
-        EntryPolicy,
-        ALMAnalysis,
-    )
+from awesome_actus_lib import PAM, Portfolio, PublicActusService
+from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
+from awesome_actus_lib.analysis.value import ValueAnalysis
+from awesome_actus_lib.pension import (
+    PensionPolicy,
+    Cohort,
+    PensionFund,
+    ClosedFundSimulator,
+    OpenFundSimulator,
+    EntryPolicy,
+    ALMAnalysis,
+)
 
 
 print("=" * 70)
 print("PENSION ALM CASE STUDY: BVG liabilities vs bond portfolio")
+print("                       Stage 2 — open fund with deterministic entrants")
 print("=" * 70)
 
 # =============================================================================
@@ -247,7 +224,7 @@ print("-" * 40)
 
 import matplotlib.pyplot as plt
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures")
+_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage2")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 
@@ -276,7 +253,7 @@ ax1.set_xticklabels(years, rotation=45, ha="right")
 ax1.legend()
 ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig1, "stage2_v1_net_liquidity.png")
+_save(fig1, "v1_net_liquidity.png")
 
 # --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(2025, 2061, 5)]
@@ -291,13 +268,13 @@ ax2.set_xlabel("Valuation Date")
 ax2.grid(True, linestyle="--", alpha=0.5)
 ax2.legend()
 plt.tight_layout()
-_save(fig2, "stage2_v2_funding_ratio_path.png")
+_save(fig2, "v2_funding_ratio_path.png")
 
 # --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
 fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows (Stage 2)",
                          return_fig=True)
 if fig3 is not None:
-    _save(fig3, "stage2_v3_combined_cashflows.png")
+    _save(fig3, "v3_combined_cashflows.png")
 
 # --- Plot 4 (Stage 2 specific): Headcount evolution ----------------------
 fig4, ax4 = plt.subplots(figsize=(12, 5))
@@ -311,6 +288,6 @@ ax4.set_xlabel("Year")
 ax4.grid(True, linestyle="--", alpha=0.5)
 ax4.legend()
 plt.tight_layout()
-_save(fig4, "stage2_v4_headcount_evolution.png")
+_save(fig4, "v4_headcount_evolution.png")
 
 plt.show()
