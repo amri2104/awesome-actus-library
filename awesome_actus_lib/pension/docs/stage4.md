@@ -361,8 +361,8 @@ print(pva.summary())
 - **Stochastic returns / mortality / salary** — Stage 4 is fully
   deterministic. Monte-Carlo over rate paths and binomial mortality are
   reserved for Stage 5.
-- **Asset rebalancing** — the asset portfolio is static (Stage 1
-  bond ladder). No buy/sell logic.
+- **Asset rebalancing** — the asset portfolio is a static bond
+  ladder. No buy/sell logic.
 - **Active pre-retirement mortality** — same scope decision as Stage 3.
 - **Calendar-year mortality improvement** — EK 2001–2005 remains a
   period table. Generation tables / improvement factors not modelled.
@@ -464,10 +464,12 @@ Both views answer different questions:
   obligation?" — the regulatory question.
 
 The example file prints both side-by-side so the divergence is
-visible. Calibration target for `Deckungsgrad_t0` in the example: the
-Complementa Risiko Check-up 2024 median, around 107 %. The
-example assert `(e)` checks `Deckungsgrad_t0 ∈ [1.00, 1.15]` after
-sizing bonds at `1.07 × Vorsorgekapital_t0`.
+visible. The example uses a hardcoded bond ladder (160M / 140M /
+100M = 400M total) that produces `Deckungsgrad_t0 ≈ 107 %` against
+the example's `Vorsorgekapital_t0 ≈ 375 M` — within the Complementa
+Risiko Check-up 2024 median region. Assert `(e)` is a loose sanity
+bound (`0 < DG < 10`); to enforce a tighter Complementa-region
+window, tighten the bound in the example.
 
 ### Limitation — no DG-path over time
 

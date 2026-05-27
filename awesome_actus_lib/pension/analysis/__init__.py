@@ -5,7 +5,6 @@ from .conversion import (
     technical_uws,
 )
 from .deckungsgrad import DeckungsgradAnalysis
-from .stochastic_alm import FundProjection, StochasticALMAnalysis
 
 __all__ = [
     "ALMAnalysis",
@@ -13,6 +12,4 @@ __all__ = [
     "annuity_due",
     "technical_uws",
     "DeckungsgradAnalysis",
-    "FundProjection",
-    "StochasticALMAnalysis",
 ]
