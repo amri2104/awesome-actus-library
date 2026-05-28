@@ -242,8 +242,8 @@ Two confounders make the magnitude hard to predict without running:
    pension-payment leg of that net stream. The denominator effect
    depends on which leg dominates in PV terms, and that depends on
    the cohort mix, discount rate, and horizon.
-2. A truly BVG-aufsichtsrechtlicher Deckungsgrad would compare
-   Vorsorgevermögen against **Vorsorgekapital** (pure obligation PV,
+2. A truly BVG-aufsichtsrechtlicher funding ratio would compare
+   pension assets against **pension capital** (pure obligation PV,
    not a net cashflow PV). Recasting `funding_ratio` along those
    lines is a separate concern, earmarked for a later stage.
 
@@ -272,7 +272,7 @@ predicting the direction analytically.
   Waisenrente).
 - **Lump-sum withdrawals at retirement** (Kapitalbezug statt
   Rente).
-- **BVG-aufsichtsrechtlicher Deckungsgrad and
+- **BVG-aufsichtsrechtlicher funding ratio and
   Wertschwankungsreserve.**
 - **Inflation indexation of pensions.**
 - **Redefining `ALMAnalysis.funding_ratio`** to use pure obligation

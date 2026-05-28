@@ -1,19 +1,19 @@
 from .alm import ALMAnalysis
 from .conversion import (
-    PensionierungsverlustAnalysis,
+    RetirementLossAnalysis,
     annuity_due,
     technical_uws,
 )
-from .deckungsgrad import DeckungsgradAnalysis
+from .funding_ratio import FundingRatioAnalysis
 from .risk_attribution import RiskAttribution
 from .stochastic_alm import StochasticALMAnalysis
 
 __all__ = [
     "ALMAnalysis",
-    "PensionierungsverlustAnalysis",
+    "RetirementLossAnalysis",
     "annuity_due",
     "technical_uws",
-    "DeckungsgradAnalysis",
+    "FundingRatioAnalysis",
     "RiskAttribution",
     "StochasticALMAnalysis",
 ]

@@ -15,16 +15,16 @@ Important scoping notes (also documented at module level for Stage 5b):
 
 * The Stage-1 ALMAnalysis funding ratio is the **liquidity-sense** net-CF
   diagnostic (NPV(assets) / |NPV(net liability CF)|), not the regulatory
-  Art-44-BVV2 solvency Deckungsgrad. Stochastic mortality moves the
+  Art-44-BVV2 solvency funding ratio. Stochastic mortality moves the
   liquidity ratio because pension-payout cashflows scale with surviving
-  headcount. The solvency Deckungsgrad @ t0 (Stage 4 / Stage 5a Phase 2
-  DeckungsgradAnalysis) is **invariant** under stochastic mortality —
-  VK_t0 depends only on t0 cohort sizes and the deterministic annuity ä_x,
+  headcount. The solvency funding ratio @ t0 (Stage 4 / Stage 5a Phase 2
+  FundingRatioAnalysis) is **invariant** under stochastic mortality —
+  PC_t0 depends only on t0 cohort sizes and the deterministic annuity ä_x,
   not on the realised survival path. Mortality-driven variance in the
-  projected (path-dependent) solvency Deckungsgrad requires forward
-  projection of VK_t and is identified as Stage 5c.
+  projected (path-dependent) solvency funding ratio requires forward
+  projection of PC_t and is identified as Stage 5c.
 
-* Survivor benefits (Witwen-/Witwerrente, Waisenrente, Todesfallleistung)
+* Survivor benefits (widow/widower pension, orphan pension, death benefit)
   are NOT modelled. When an active member dies, their AGH is removed from
   the liability side without a corresponding asset-side payout. This
   introduces a small upward bias in funded-ratio paths with high active-

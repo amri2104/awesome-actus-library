@@ -68,7 +68,7 @@ class ALMAnalysis:
         # Funding ratio = assets / |obligations|.
         return npv_assets / abs(npv_liab)
 
-    def deckungsgrad_path(self, dates) -> pd.Series:
+    def funding_ratio_path(self, dates) -> pd.Series:
         return pd.Series(
             {pd.to_datetime(d): self.funding_ratio(d) for d in dates},
             name="funding_ratio",

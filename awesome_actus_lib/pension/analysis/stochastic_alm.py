@@ -222,7 +222,7 @@ class StochasticALMAnalysis:
         """Distributional + tail-risk summary of the funding ratio at as_of.
 
         For a funding ratio the downside is a LOW value, so the tail measures
-        sit in the lower tail: dg_p5 is the 95%-confidence floor, dg_es5 is the
+        sit in the lower tail: fr_p5 is the 95%-confidence floor, fr_es5 is the
         mean funding ratio in the worst 5% of scenarios.
         """
         dist = self.funding_ratio_distribution(as_of)
@@ -237,9 +237,9 @@ class StochasticALMAnalysis:
             "p95": float(np.percentile(dist, 95)),
             "min": float(np.min(dist)),
             "max": float(np.max(dist)),
-            "dg_p5": p5,                                      # 95% VaR-level floor
-            "dg_es5": float(np.mean(dist[dist <= p5])),       # expected shortfall
-            "p_underfunded": float(np.mean(dist < 1.0)),      # P(DG < 100%)
+            "fr_p5": p5,                                      # 95% VaR-level floor
+            "fr_es5": float(np.mean(dist[dist <= p5])),       # expected shortfall
+            "p_underfunded": float(np.mean(dist < 1.0)),      # P(FR < 100%)
         }
 
     def fan_chart_data(

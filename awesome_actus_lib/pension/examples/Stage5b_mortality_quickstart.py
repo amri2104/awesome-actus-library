@@ -1,23 +1,9 @@
 """Stage5b_mortality_quickstart.py
 
-Stage 5b Phase 1 — stochastic LIABILITY side (binomial cohort transitions)
-on top of Stage 5a:
-  - Stage-4 deterministic liability backbone (same fund as Stage 4/5a)
-  - mixed asset portfolio (fixed + floating PAMs, same as Stage 5a Phase 1)
-  - RiskAttribution sweep over five configurations:
-      (a) baseline                 — det. assets + det. mortality
-      (b) mortality retirees only  — det. assets + binomial on retired cohorts
-      (c) mortality all cohorts    — det. assets + binomial on actives+retirees
-      (d) assets only              — stochastic assets + det. mortality
-      (e) full                     — stochastic assets + binomial on all cohorts
-
-Scoping (also in RiskAttribution docstring):
-  * Funding ratio here = liquidity-sense net-CF diagnostic (Stage 1 ALM).
-    Solvency Deckungsgrad @ t0 (Art. 44 BVV2) is invariant under stochastic
-    mortality — see [3]. Mortality-driven solvency variance is Stage 5c.
-  * Survivor benefits (Witwen-/Waisenrente, Todesfallleistung) not modelled.
-  * Idiosyncratic mortality only (Maffra/A/P 2021 Eq. 1); systemic longevity
-    risk (stochastic v_t) is future work.
+Stage 5b — stochastic LIABILITY side (binomial cohort transitions) on top of Stage 5a:
+  - Stage-4 deterministic liability backbone + Stage 5a mixed asset portfolio
+  - RiskAttribution sweep over five configs:
+      baseline / mortality retirees / mortality all / assets only / full
 """
 
 import os
@@ -35,7 +21,7 @@ from awesome_actus_lib.pension import (
     DynamicFundSimulator,
     Stage4Dynamics,
     EntryPolicy,
-    DeckungsgradAnalysis,
+    FundingRatioAnalysis,
     RiskAttribution,
     ek2001_2005,
     simulate_liability_paths,
@@ -52,10 +38,9 @@ SEED_ASSETS = 42
 SEED_LIAB = 4242
 
 
-print("=" * 70)
-print("PENSION ALM CASE STUDY: BVG liabilities vs bond portfolio")
-print("                       Stage 5b — stochastic liability side (mortality)")
-print("=" * 70)
+print("=" * 78)
+print("PENSION ALM CASE STUDY — Stage 5b — stochastic liability side (mortality)")
+print("=" * 78)
 
 # =============================================================================
 # 1A. PORTFOLIO DEFINITION (liability side) — same fund as Stage 4/5a
@@ -64,7 +49,11 @@ print("\n[1A] Portfolio Definition — liabilities (same fund as Stage 4/5a)")
 print("-" * 40)
 
 policy = PensionPolicy()
-liability_fund = PensionFund(policy=policy, start_date=START_DATE)
+
+liability_fund = PensionFund(
+    policy=policy,
+    start_date=START_DATE,
+)
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1960",
     birth_year=1960,
@@ -151,7 +140,11 @@ dynamics = Stage4Dynamics(
     conversion_rate_path={2025: 0.0523, 2029: 0.0510},
     threshold_index_period=5,
 )
-mortality = ek2001_2005()
+# Generational EK 2001-2005 (1.25%/yr improvement from 2003): lifts ä_x to a
+# realistic level for solvency/funding-ratio valuation (PC values retirees via
+# ä_x). Harmless for liquidity-lens analyses — the headcount decrement is
+# unaffected (no cal_year is passed there).
+mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 print(f"  Active cohorts: 8 birth-year buckets, retirement age 65")
 print(f"  Retired cohort: RETIRED_1955, 80 members, pension CHF 31,380/year")
@@ -265,18 +258,22 @@ print(f"  Base curve: {curve_rates[0]:.2%} (1Y) -> {curve_rates[-1]:.2%} (10Y), 
 
 
 # =============================================================================
-# 3. SOLVENCY DECKUNGSGRAD @ t0 (Art. 44 BVV2) — INVARIANT under stoch. mort.
+# 3. SOLVENCY FUNDING RATIO @ t0 (Art. 44 BVV2) — INVARIANT under stoch. mort.
 # =============================================================================
-print("\n[3] Solvency Deckungsgrad @ t0 (Art. 44 BVV2 — invariant under stoch. mortality)")
+print("\n[3] Solvency funding ratio @ t0 (Art. 44 BVV2 — invariant under stoch. mortality)")
 print("-" * 40)
 
 vv = sum(c.terms["notionalPrincipal"].value for c in asset_portfolio.contracts)
-dga = DeckungsgradAnalysis(fund=liability_fund, mortality=mortality, vorsorgevermoegen=vv)
-print(f"  Vorsorgevermoegen:    CHF {vv:>15,.2f}")
-print(f"  Vorsorgekapital_t0:   CHF {dga.vorsorgekapital_t0():>15,.2f}")
-print(f"  Deckungsgrad_t0:                  {dga.deckungsgrad_t0():>15.2%}")
+fra = FundingRatioAnalysis(
+    fund=liability_fund,
+    mortality=mortality,
+    pension_assets=vv,
+)
+print(f"  Pension assets:       CHF {vv:>15,.2f}")
+print(f"  Pension capital_t0:   CHF {fra.pension_capital_t0():>15,.2f}")
+print(f"  Funding ratio_t0:                 {fra.funding_ratio_t0():>15.2%}")
 print("  (Same number under deterministic and stochastic mortality —")
-print("   VK_t0 uses only t0 cohort sizes + deterministic annuity ä_x.)")
+print("   PC_t0 uses only t0 cohort sizes + deterministic annuity ä_x.)")
 
 
 # =============================================================================
@@ -366,7 +363,7 @@ assert std_b > 1e-6, \
 print(f"  (b) mortality wired in (σ_IR=0 → std(FR) = {std_b:.4%}) OK.")
 
 # (c) LLN diversification (Maffra Fig. 11): scale cohorts ×10, pensions ÷10
-#     (VK invariant) → mortality variance must shrink by ~factor 10.
+#     (PC invariant) → mortality variance must shrink by ~factor 10.
 scaled_fund = PensionFund(policy=policy, start_date=START_DATE)
 for c in liability_fund.cohorts:
     scaled_fund.add_cohort(Cohort(

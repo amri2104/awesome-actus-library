@@ -4,7 +4,7 @@ Stage 4 — deterministic time-varying parameters on top of Stage 1/2/3:
   - salary growth (annual, geometric)
   - falling applied conversion rate path (per retirement year)
   - BVG-threshold indexation in k-year steps
-  - PensionierungsverlustAnalysis (applied CR vs technical CR = 1/ä_x)
+  - RetirementLossAnalysis (applied CR vs technical CR = 1/ä_x)
 """
 
 import os
@@ -24,8 +24,8 @@ from awesome_actus_lib.pension import (
     Stage4Dynamics,
     EntryPolicy,
     ALMAnalysis,
-    DeckungsgradAnalysis,
-    PensionierungsverlustAnalysis,
+    FundingRatioAnalysis,
+    RetirementLossAnalysis,
     annuity_due,
     technical_uws,
     MortalityTable,
@@ -38,15 +38,14 @@ START_DATE = "2025-01-01T00:00:00"
 START_YEAR = int(START_DATE[:4])
 
 
-print("=" * 70)
-print("PENSION ALM CASE STUDY: BVG liabilities vs bond portfolio")
-print("                       Stage 4 — dynamic salary + CR path + KPI")
-print("=" * 70)
+print("=" * 78)
+print("PENSION ALM CASE STUDY — Stage 4 — dynamic salary + CR path + KPI")
+print("=" * 78)
 
 # =============================================================================
 # 1A. PORTFOLIO DEFINITION (liability side) — Stage 4: dynamic parameters
 # =============================================================================
-print("\n[1A] Portfolio Definition — liabilities (Stage 4: dynamic parameters)")
+print("\n[1A] Portfolio Definition — liabilities (dynamic parameters)")
 print("-" * 40)
 
 policy = PensionPolicy()
@@ -146,7 +145,12 @@ dynamics = Stage4Dynamics(
     threshold_index_period=5,
 )
 
-mortality = ek2001_2005()
+# Generational table: EK 2001-2005 projected with a 1.25%/yr mortality
+# improvement from the 2003 observation midpoint. This lifts ä_x to a
+# realistic level (fair UWS ~4.9% @65 instead of 5.50% on the raw period
+# table), so the baseline conversion path actually produces a loss rather
+# than the artefactual gain the stale period table implies.
+mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 print(f"  Active cohorts: 8 birth-year buckets, retirement age 65")
 print(f"  Retired cohort: RETIRED_1955, 80 members, pension CHF 31,380/year")
@@ -154,7 +158,7 @@ print(f"  EntryPolicy: 20 entrants/year, age 25, salary CHF 80,000")
 print(f"  Stage4Dynamics: salary_growth={dynamics.salary_growth:.2%}, "
       f"CR path={dynamics.conversion_rate_path}, "
       f"threshold_index_period={dynamics.threshold_index_period}y")
-print(f"  Mortality:    EK 2001-2005 period table")
+print(f"  Mortality:    EK 2001-2005 generational (improvement 1.25%/yr from 2003)")
 print(f"  Horizon:      {HORIZON_YEARS} years")
 
 
@@ -264,7 +268,7 @@ print(net_table.head().to_string())
 fr_t0 = alm.funding_ratio(as_of="2025-01-01")
 print(f"\n  Variant 2 — Net-CF diagnostic @ 2025-01-01: {fr_t0:.2%}")
 
-fr_path = alm.deckungsgrad_path(["2025-01-01", "2030-01-01", "2035-01-01"])
+fr_path = alm.funding_ratio_path(["2025-01-01", "2030-01-01", "2035-01-01"])
 print("  Net-CF diagnostic path:")
 print(fr_path.to_string())
 
@@ -305,19 +309,19 @@ print("\n[3A-DG] Funding ratio @ t0 (Art. 44 BVV2)")
 print("-" * 40)
 
 vv = sum(c.terms["notionalPrincipal"].value for c in asset_portfolio.contracts)
-dga = DeckungsgradAnalysis(
+fra = FundingRatioAnalysis(
     fund=liability_fund,
     mortality=mortality,
-    vorsorgevermoegen=vv,
+    pension_assets=vv,
 )
-VK_check = dga.vorsorgekapital_t0()
-dg_t0 = dga.deckungsgrad_t0()
+PC_check = fra.pension_capital_t0()
+dg_t0 = fra.funding_ratio_t0()
 print(f"  Pension assets   (Σ bond notionals): CHF {vv:>15,.2f}")
-print(f"  Pension capital_t0:                  CHF {VK_check:>15,.2f}")
+print(f"  Pension capital_t0:                  CHF {PC_check:>15,.2f}")
 print(f"  Funding ratio_t0:                    {dg_t0:>15.2%}")
 
 print(f"\n  Breakdown per cohort:")
-breakdown = dga.breakdown()
+breakdown = fra.breakdown()
 print(breakdown.to_string(index=False,
                           float_format=lambda x: f"{x:,.4f}"))
 
@@ -327,15 +331,15 @@ print(breakdown.to_string(index=False,
 print("\n[3B] Retirement-loss analysis — baseline (5.23% -> 5.10%)")
 print("-" * 40)
 
-pva_base = PensionierungsverlustAnalysis(
+rla_base = RetirementLossAnalysis(
     liability_cf=liability_cfs,
     policy=policy,
     mortality=mortality,
 )
-verlust_df = pva_base.summary()
-print(verlust_df.to_string(index=False,
+loss_df = rla_base.summary()
+print(loss_df.to_string(index=False,
                            float_format=lambda x: f"{x:,.4f}"))
-base_total = verlust_df["verlust_total"].sum()
+base_total = loss_df["loss_total"].sum()
 print(f"\n  Σ baseline loss: CHF {base_total:,.2f}")
 
 # =============================================================================
@@ -356,13 +360,13 @@ stress_sim = DynamicFundSimulator(
     mortality=mortality,
 )
 stress_cf = stress_sim.run(horizon_years=HORIZON_YEARS)
-pva_stress = PensionierungsverlustAnalysis(
+rla_stress = RetirementLossAnalysis(
     liability_cf=stress_cf,
     policy=policy,
     mortality=mortality,
 )
-stress_df = pva_stress.summary()
-stress_total = stress_df["verlust_total"].sum()
+stress_df = rla_stress.summary()
+stress_total = stress_df["loss_total"].sum()
 print(f"  Σ stress loss:   CHF {stress_total:,.2f}")
 print(f"  Σ baseline loss: CHF {base_total:,.2f}")
 print(f"  Difference:      CHF {stress_total - base_total:,.2f}")
@@ -422,14 +426,14 @@ print(f"  (b) Stage-3 identity OK (rel. diff {rel:.2e}).")
 # (c) Stress sign + ordering
 violations = stress_df[
     (stress_df["applied_uws"] > stress_df["technical_uws"])
-    & (stress_df["verlust_per_capita"] <= 0.0)
+    & (stress_df["loss_per_capita"] <= 0.0)
 ]
 assert violations.empty, f"(c) sign violation in stress"
 assert stress_total > 0, f"(c2) stress total not positive: {stress_total}"
 assert base_total <= stress_total, f"(c3) baseline must be <= stress"
 print(f"  (c) Stress sign + ordering OK.")
 
-# (d) Single-cohort VK sanity
+# (d) Single-cohort PC sanity
 solo_fund = PensionFund(policy=policy, start_date=START_DATE)
 solo_fund.add_cohort(Cohort(
     cohort_id="SOLO",
@@ -439,26 +443,26 @@ solo_fund.add_cohort(Cohort(
     accrued_savings=100_000.0,
     gender="unisex",
 ))
-vk_solo = DeckungsgradAnalysis(
+pc_solo = FundingRatioAnalysis(
     fund=solo_fund,
     mortality=None,
-    vorsorgevermoegen=0.0,
-).vorsorgekapital_t0()
-assert vk_solo == 1_000_000.0, f"(d) single-cohort VK failed: {vk_solo}"
-print(f"  (d) Single-cohort VK = {vk_solo:,.2f} OK.")
+    pension_assets=0.0,
+).pension_capital_t0()
+assert pc_solo == 1_000_000.0, f"(d) single-cohort PC failed: {pc_solo}"
+print(f"  (d) Single-cohort PC = {pc_solo:,.2f} OK.")
 
 # (e) Funding ratio_t0 sanity: positive and finite
 assert dg_t0 > 0 and dg_t0 < 10, f"(e) funding ratio_t0 unrealistic: {dg_t0:.4f}"
 print(f"  (e) Funding ratio_t0 = {dg_t0:.4%}. OK.")
 
-# (f) Retiree contribution: ä > 1 and vk_beitrag == pension*hc*ä
+# (f) Retiree contribution: ä > 1 and pc_contribution == pension*hc*ä
 ret_row = breakdown[breakdown["cohort_id"] == "RETIRED_1955"].iloc[0]
 ret_cohort = next(c for c in liability_fund.cohorts if c.cohort_id == "RETIRED_1955")
 assert ret_row["annuity_due"] > 1.0
 expected_vk = ret_cohort.annual_pension * ret_cohort.headcount * ret_row["annuity_due"]
-rel_f = abs(ret_row["vk_beitrag"] - expected_vk) / abs(expected_vk)
+rel_f = abs(ret_row["pc_contribution"] - expected_vk) / abs(expected_vk)
 assert rel_f < 1e-9
-print(f"  (f) Retiree vk_beitrag matches pension*hc*ä OK.")
+print(f"  (f) Retiree pc_contribution matches pension*hc*ä OK.")
 
 
 # =============================================================================
@@ -491,7 +495,7 @@ ax1.bar(x, net_table["netLiquidity_liabilities"],
 ax1.bar([i + width for i in x], net_table["net"],
         width=width, label="Net", color="#264653")
 ax1.axhline(0, color="black", linewidth=0.6)
-ax1.set_title("Variant 1 — Net Liquidity per Year (Stage 4: dynamic salary + CR path)")
+ax1.set_title("Stage 4 — Net Liquidity per Year")
 ax1.set_ylabel("CHF")
 ax1.set_xticks(list(x))
 ax1.set_xticklabels(years, rotation=45, ha="right")
@@ -502,12 +506,12 @@ _save(fig1, "v1_net_liquidity.png")
 
 # --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
-fr_series = alm.deckungsgrad_path(fr_dates)
+fr_series = alm.funding_ratio_path(fr_dates)
 
 fig2, ax2 = plt.subplots(figsize=(10, 4))
 ax2.plot(fr_series.index, fr_series.values, marker="o", color="#264653")
 ax2.axhline(1.0, color="red", linestyle="--", linewidth=0.8, label="100% coverage")
-ax2.set_title("Variant 2 — Funding Ratio Path (Stage 4)")
+ax2.set_title("Stage 4 — Funding Ratio Path")
 ax2.set_ylabel("Funding Ratio")
 ax2.set_xlabel("Valuation Date")
 ax2.grid(True, linestyle="--", alpha=0.5)
@@ -516,7 +520,7 @@ plt.tight_layout()
 _save(fig2, "v2_funding_ratio_path.png")
 
 # --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
-fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows (Stage 4)",
+fig3 = combined_cfs.plot(title="Stage 4 — Combined Asset + Liability Cashflows",
                          return_fig=True)
 if fig3 is not None:
     _save(fig3, "v3_combined_cashflows.png")
@@ -539,7 +543,7 @@ _save(fig4, "v4_cohort_headcount_decline.png")
 
 # --- Plot 5: CR path — applied vs technical ------------------------------
 fig5, ax5 = plt.subplots(figsize=(11, 5))
-plot_df = verlust_df.sort_values("year")
+plot_df = loss_df.sort_values("year")
 ax5.plot(plot_df["year"], plot_df["applied_uws"] * 100,
          marker="o", color="#e76f51", label="Applied CR (Stage4Dynamics)")
 ax5.plot(plot_df["year"], plot_df["technical_uws"] * 100,
@@ -556,7 +560,7 @@ _save(fig5, "v5_uws_path.png")
 
 # --- Plot 6: Retirement loss per year ------------------------------------
 fig6, ax6 = plt.subplots(figsize=(11, 5))
-agg = (verlust_df.groupby("year")["verlust_total"].sum()
+agg = (loss_df.groupby("year")["loss_total"].sum()
        .sort_index())
 ax6.bar(agg.index.astype(str), agg.values, color="#e76f51")
 ax6.axhline(0, color="black", linewidth=0.6)
@@ -565,6 +569,6 @@ ax6.set_ylabel("Loss in CHF")
 ax6.set_xlabel("Retirement year")
 ax6.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig6, "v6_pensionierungsverlust_per_year.png")
+_save(fig6, "v6_retirement_loss_per_year.png")
 
 plt.show()

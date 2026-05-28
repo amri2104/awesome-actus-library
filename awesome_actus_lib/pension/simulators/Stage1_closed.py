@@ -154,7 +154,7 @@ class ClosedFundSimulator:
         risk_amt = policy.risk_contribution_rate * insured * cohort.headcount
         admin = policy.admin_cost_per_member * cohort.headcount
 
-        interest_pc = cohort.accrued_savings * policy.applied_interest_rate
+        interest_pc = cohort.accrued_savings * policy.credited_interest_rate()
         cohort.accrued_savings = cohort.accrued_savings + interest_pc + sav_rate * insured
 
         sink.append({"time": event_date, "type": ev.SAV_CONTRIB, "payoff": sav_amt})

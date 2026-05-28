@@ -19,7 +19,7 @@ time-varying** parameters and one new actuarial KPI:
    `bvg_max_salary`, `coordination_deduction` grow every
    `threshold_index_period` years (default 5), mirroring the real
    Bundesrat adjustment cycle.
-4. **Pensionierungsverlust KPI** — compares the applied UWS against the
+4. **retirement-loss KPI** — compares the applied UWS against the
    technically correct UWS = `1 / ä_x` (annuity-due) for every
    retirement event in the stream.
 
@@ -45,7 +45,7 @@ This document covers only the deltas.
 | `RETIREMENT_CONV` event fields      | `agh_per_capita_at_conversion`, `annual_pension_per_capita` | + **`age_at_conversion`**, **`gender`**, **`headcount_at_conversion`**   |
 | Other event types                   | unchanged                             | unchanged                                                                |
 | Output type                         | `CashFlowStream`                      | `CashFlowStream` (same)                                                  |
-| Analysis layer                      | `ALMAnalysis`                         | `ALMAnalysis` + **new** `PensionierungsverlustAnalysis`                  |
+| Analysis layer                      | `ALMAnalysis`                         | `ALMAnalysis` + **new** `RetirementLossAnalysis`                  |
 | `PensionPolicy`, `Cohort`, `PensionFund`, `MortalityTable` | unchanged    | unchanged                                                                |
 
 **Backward compatibility.** Defaults reproduce Stage 3 **numerically
@@ -118,7 +118,7 @@ The example file uses two scenarios:
   minimum applied flat to the **total** AGH, i.e. **without** the
   Anrechnungsprinzip. This is **not** a realistic enveloping fund
   but an illustration of the study's core claim that an
-  over-prescribed UWS produces Pensionierungsverluste. The example's
+  over-prescribed UWS produces retirement losses. The example's
   asserts `(c)` / `(c2)` / `(c3)` use this scenario to exercise the
   positive-loss branch of the KPI.
 
@@ -232,7 +232,7 @@ modification), which is verified at the end of the implementation via
 
 ------------------------------------------------------------------------
 
-## 4. New Analysis Block — `annuity_due`, `technical_uws`, `PensionierungsverlustAnalysis`
+## 4. New Analysis Block — `annuity_due`, `technical_uws`, `RetirementLossAnalysis`
 
 Lives in `awesome_actus_lib.pension.analysis.conversion`.
 
@@ -254,7 +254,7 @@ provided `MortalityTable`.
 `1 / annuity_due(...)`. The UWS that would make the applied pension
 exactly cover the technically discounted expected liability.
 
-### `PensionierungsverlustAnalysis(liability_cf, policy, mortality)`
+### `RetirementLossAnalysis(liability_cf, policy, mortality)`
 
 Reads enriched `RETIREMENT_CONV` events from a Stage-4 liability
 `CashFlowStream`. Needs **no external metadata**: birth year derives
@@ -263,11 +263,11 @@ from the event.
 
 Per-capita loss:
 ```
-verlust_pc    = AGH * (applied_uws * ä_x - 1)
+loss_pc    = AGH * (applied_uws * ä_x - 1)
 ```
 Total loss:
 ```
-verlust_total = verlust_pc * headcount_at_conversion
+loss_total = loss_pc * headcount_at_conversion
 ```
 
 `.summary()` returns a `pandas.DataFrame` with one row per
@@ -283,9 +283,9 @@ verlust_total = verlust_pc * headcount_at_conversion
 | `applied_uws`        | `annual_pension_per_capita / AGH_per_capita`       |
 | `technical_uws`      | `1 / ä_x`                                          |
 | `annuity_due`        | `ä_x`                                              |
-| `verlust_per_capita` | AGH × (applied × ä_x − 1)                          |
+| `loss_per_capita` | AGH × (applied × ä_x − 1)                          |
 | `headcount`          | headcount at the moment of conversion              |
-| `verlust_total`      | `verlust_per_capita * headcount`                   |
+| `loss_total`      | `loss_per_capita * headcount`                   |
 
 **Hard requirement.** `mortality` must not be `None` — ä_x is
 undefined without survival probabilities. The constructor raises a
@@ -304,7 +304,7 @@ listing what is missing.
 from awesome_actus_lib.pension import (
     PensionPolicy, Cohort, PensionFund,
     DynamicFundSimulator, Stage4Dynamics,
-    EntryPolicy, PensionierungsverlustAnalysis,
+    EntryPolicy, RetirementLossAnalysis,
     ek2001_2005,
 )
 
@@ -344,7 +344,7 @@ simulator = DynamicFundSimulator(
 liability_cfs = simulator.run(horizon_years=40)
 
 # 5. KPI
-pva = PensionierungsverlustAnalysis(
+pva = RetirementLossAnalysis(
     liability_cf=liability_cfs,
     policy=policy,
     mortality=ek2001_2005(),
@@ -404,7 +404,7 @@ new files plus three additive edits to `__init__.py` re-exports.
 
 ------------------------------------------------------------------------
 
-## 8. Deckungsgrad — Netto-CF-Ratio vs Art-44-BVV2
+## 8. funding ratio — Netto-CF-Ratio vs Art-44-BVV2
 
 `ALMAnalysis.funding_ratio` (from Stage 1) discounts a **net** liability
 cashflow stream (`SAV_CONTRIB` + `RISK_CONTRIB` − `PENSION_PAYMENT` −
@@ -416,20 +416,20 @@ funding_ratio = NPV(assets) / |NPV(net liability CF)|
 
 It is **mix-sensitive** — contributions in the numerator of the net CF
 shrink |NPV(net)| and inflate the ratio. It is **not** the regulatory
-Deckungsgrad in the sense of Art. 44 BVV2. It stays in the codebase as
+funding ratio in the sense of Art. 44 BVV2. It stays in the codebase as
 a **diagnostic** (cashflow-coverage view), but should not be reported
 as the fund's coverage.
 
-### `DeckungsgradAnalysis` — the Art-44-BVV2-near view
+### `FundingRatioAnalysis` — the Art-44-BVV2-near view
 
 ```
-Deckungsgrad_t0 = Vorsorgevermoegen / Vorsorgekapital_t0
+funding_ratio_t0 = pension assets / pension capital_t0
 ```
 
-`Vorsorgekapital_t0` is built **from the fund state at t0**, not from
+`pension capital_t0` is built **from the fund state at t0**, not from
 projected events:
 
-| Cohort status | Beitrag zum Vorsorgekapital                                       |
+| Cohort status | Beitrag zum pension capital                                       |
 |---------------|-------------------------------------------------------------------|
 | `active`      | `accrued_savings * headcount`  (AGH-Buchwert, Art. 16 FZG)        |
 | `retired`     | `annual_pension * headcount * ä_x`  (PV der laufenden Renten)     |
@@ -437,20 +437,20 @@ projected events:
 with `ä_x = annuity_due(age_at_t0, gender, technical_rate, mortality,
 terminal_age)` reused from `analysis/conversion.py`.
 
-`Vorsorgevermoegen` is supplied by the caller — in the example it is
+`pension assets` is supplied by the caller — in the example it is
 `Σ Bond-Notionals` (par values at t0).
 
 ``` python
-from awesome_actus_lib.pension import DeckungsgradAnalysis, ek2001_2005
+from awesome_actus_lib.pension import FundingRatioAnalysis, ek2001_2005
 
-dga = DeckungsgradAnalysis(
+dga = FundingRatioAnalysis(
     fund=liability_fund,
     mortality=ek2001_2005(),
-    vorsorgevermoegen=sum(c.terms["notionalPrincipal"].value
+    pension_assets=sum(c.terms["notionalPrincipal"].value
                           for c in asset_portfolio.contracts),
 )
-print(f"VK_t0       = {dga.vorsorgekapital_t0():,.2f}")
-print(f"DG_t0       = {dga.deckungsgrad_t0():.2%}")
+print(f"VK_t0       = {dga.pension_capital_t0():,.2f}")
+print(f"DG_t0       = {dga.funding_ratio_t0():.2%}")
 print(dga.breakdown())   # per-cohort decomposition
 ```
 
@@ -460,20 +460,20 @@ Both views answer different questions:
 
 - `funding_ratio` (Stage 1 ALM) asks "do future contribution + asset
   inflows cover future pension outflows in PV terms?".
-- `Deckungsgrad_t0` asks "does today's asset value cover the booked
+- `funding_ratio_t0` asks "does today's asset value cover the booked
   obligation?" — the regulatory question.
 
 The example file prints both side-by-side so the divergence is
 visible. The example uses a hardcoded bond ladder (160M / 140M /
-100M = 400M total) that produces `Deckungsgrad_t0 ≈ 107 %` against
-the example's `Vorsorgekapital_t0 ≈ 375 M` — within the Complementa
+100M = 400M total) that produces `funding_ratio_t0 ≈ 107 %` against
+the example's `pension capital_t0 ≈ 375 M` — within the Complementa
 Risiko Check-up 2024 median region. Assert `(e)` is a loose sanity
 bound (`0 < DG < 10`); to enforce a tighter Complementa-region
 window, tighten the bound in the example.
 
 ### Limitation — no DG-path over time
 
-`DeckungsgradAnalysis` is **t0-only**. A time-varying Deckungsgrad-path
+`FundingRatioAnalysis` is **t0-only**. A time-varying funding ratio-path
 would require projecting `accrued_savings × headcount` and pensioner
 survival forward (and consistently rolling the asset side). That is a
 Tier-2 extension — not implemented in Stage 4.

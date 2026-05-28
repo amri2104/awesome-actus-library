@@ -23,8 +23,8 @@ from awesome_actus_lib.pension import (
     Stage4Dynamics,
     EntryPolicy,
     ALMAnalysis,
-    DeckungsgradAnalysis,
-    PensionierungsverlustAnalysis,
+    FundingRatioAnalysis,
+    RetirementLossAnalysis,
     StochasticALMAnalysis,
     ek2001_2005,
 )
@@ -39,10 +39,9 @@ N_PATHS = int(os.environ.get("STAGE5A_N_PATHS", "200"))
 SEED = 42
 
 
-print("=" * 70)
-print("PENSION ALM CASE STUDY: BVG liabilities vs bond portfolio")
-print("                       Stage 5a — stochastic asset side (floaters)")
-print("=" * 70)
+print("=" * 78)
+print("PENSION ALM CASE STUDY — Stage 5a — stochastic asset side (floaters)")
+print("=" * 78)
 
 # =============================================================================
 # 1A. PORTFOLIO DEFINITION (liability side) — same fund as Stage 4 example
@@ -144,7 +143,11 @@ dynamics = Stage4Dynamics(
     threshold_index_period=5,
 )
 
-mortality = ek2001_2005()
+# Generational EK 2001-2005 (1.25%/yr improvement from 2003): lifts ä_x to a
+# realistic level for solvency/funding-ratio valuation (PC values retirees via
+# ä_x). Harmless for liquidity-lens analyses — the headcount decrement is
+# unaffected (no cal_year is passed there).
+mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 print(f"  Active cohorts: 8 birth-year buckets, retirement age 65")
 print(f"  Retired cohort: RETIRED_1955, 80 members, pension CHF 31,380/year")
@@ -293,7 +296,7 @@ print(net_table.head().to_string())
 fr_t0_det = alm.funding_ratio(as_of="2025-01-01")
 print(f"\n  Variant 2 — Net-CF diagnostic @ 2025-01-01: {fr_t0_det:.2%}")
 
-fr_path = alm.deckungsgrad_path(["2025-01-01", "2030-01-01", "2035-01-01"])
+fr_path = alm.funding_ratio_path(["2025-01-01", "2030-01-01", "2035-01-01"])
 print("  Net-CF diagnostic path:")
 print(fr_path.to_string())
 
@@ -305,15 +308,15 @@ print("\n[3A-DG] Funding ratio @ t0 (Art. 44 BVV2)")
 print("-" * 40)
 
 vv = sum(c.terms["notionalPrincipal"].value for c in asset_portfolio.contracts)
-dga = DeckungsgradAnalysis(
+fra = FundingRatioAnalysis(
     fund=liability_fund,
     mortality=mortality,
-    vorsorgevermoegen=vv,
+    pension_assets=vv,
 )
-VK_check = dga.vorsorgekapital_t0()
-dg_t0 = dga.deckungsgrad_t0()
+PC_check = fra.pension_capital_t0()
+dg_t0 = fra.funding_ratio_t0()
 print(f"  Pension assets   (Σ bond notionals): CHF {vv:>15,.2f}")
-print(f"  Pension capital_t0:                  CHF {VK_check:>15,.2f}")
+print(f"  Pension capital_t0:                  CHF {PC_check:>15,.2f}")
 print(f"  Funding ratio_t0:                    {dg_t0:>15.2%}")
 
 
@@ -323,13 +326,13 @@ print(f"  Funding ratio_t0:                    {dg_t0:>15.2%}")
 print("\n[3B] Retirement-loss analysis — baseline (5.23% -> 5.10%)")
 print("-" * 40)
 
-pva_base = PensionierungsverlustAnalysis(
+rla_base = RetirementLossAnalysis(
     liability_cf=liability_cfs,
     policy=policy,
     mortality=mortality,
 )
-verlust_df = pva_base.summary()
-base_total = verlust_df["verlust_total"].sum()
+loss_df = rla_base.summary()
+base_total = loss_df["loss_total"].sum()
 print(f"  Σ baseline loss: CHF {base_total:,.2f}")
 
 
@@ -366,7 +369,7 @@ for as_of in ("2025-01-01", "2035-01-01"):
     print(f"\n  Funding ratio @ {as_of}:")
     print(f"    mean={s['mean']:.2%}  std={s['std']:.2%}  "
           f"p5={s['p5']:.2%}  p50={s['p50']:.2%}  p95={s['p95']:.2%}")
-    print(f"    ES(worst 5%)={s['dg_es5']:.2%}  P(DG<100%)={s['p_underfunded']:.1%}")
+    print(f"    ES(worst 5%)={s['fr_es5']:.2%}  P(DG<100%)={s['p_underfunded']:.1%}")
 
 
 # =============================================================================
@@ -467,7 +470,7 @@ _save(fig2, "v2_cohort_headcount_decline.png")
 
 # --- Plot 3: CR path — applied vs technical ------------------------------
 fig3, ax3 = plt.subplots(figsize=(11, 5))
-plot_df = verlust_df.sort_values("year")
+plot_df = loss_df.sort_values("year")
 ax3.plot(plot_df["year"], plot_df["applied_uws"] * 100,
          marker="o", color="#e76f51", label="Applied CR (Stage4Dynamics)")
 ax3.plot(plot_df["year"], plot_df["technical_uws"] * 100,
@@ -484,7 +487,7 @@ _save(fig3, "v3_uws_path.png")
 
 # --- Plot 4: Retirement loss per year ------------------------------------
 fig4, ax4 = plt.subplots(figsize=(11, 5))
-agg = (verlust_df.groupby("year")["verlust_total"].sum()
+agg = (loss_df.groupby("year")["loss_total"].sum()
        .sort_index())
 ax4.bar(agg.index.astype(str), agg.values, color="#e76f51")
 ax4.axhline(0, color="black", linewidth=0.6)
@@ -493,7 +496,7 @@ ax4.set_ylabel("Loss in CHF")
 ax4.set_xlabel("Retirement year")
 ax4.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
-_save(fig4, "v4_pensionierungsverlust_per_year.png")
+_save(fig4, "v4_retirement_loss_per_year.png")
 
 # --- Plot 5: Stochastic funding-ratio distribution @ t0 ------------------
 fig5, ax5 = plt.subplots(figsize=(10, 5))

@@ -15,7 +15,7 @@ deterministic pipeline and is delivered in three increments:
   (`StochasticALMAnalysis`).
 * **Stage 5a Phase 2** — mark-to-market **equity sleeve** driven by a
   Geometric Brownian Motion (GBM) and a forward-projected solvency
-  Deckungsgrad (`StochasticDeckungsgradAnalysis`).
+  funding ratio (`StochasticFundingRatioAnalysis`).
 * **Stage 5b** — stochastic **liability** cashflow paths via binomial
   cohort transitions (`simulate_liability_paths`) and a **variance
   attribution** protocol across the asset and mortality channels
@@ -38,7 +38,7 @@ only the Stage 5 deltas.
 | **Equity sleeve**     | --                                       | --                          | GBM mark-to-market.         | GBM optional.                           |
 | **Discounting**       | Flat `technical_rate`.                   | Sticky flat `i_tech`.       | Sticky flat `i_tech`.       | Sticky flat `i_tech`.                   |
 | **Liabilities**       | Deterministic (Stage 4).                 | Deterministic (Stage 4).    | Deterministic (Stage 4).    | **Stochastic** (binomial cohort decrement). |
-| **Solvency lens**     | `DeckungsgradAnalysis` (t₀ snapshot).    | not extended.               | `StochasticDeckungsgradAnalysis` (path-dependent V_i(d)). | reuses Phase 2 if equity given. |
+| **Solvency lens**     | `FundingRatioAnalysis` (t₀ snapshot).    | not extended.               | `StochasticFundingRatioAnalysis` (path-dependent V_i(d)). | reuses Phase 2 if equity given. |
 | **Reporting**         | Single deterministic numbers.            | Distribution of funding ratio per as_of. | Distribution of solvency DG per as_of. | Variance decomposition across channels. |
 
 All Stage 5 features are **additive**. Defaults preserve Stage 4
@@ -119,10 +119,10 @@ Lives in `awesome_actus_lib.pension.analysis.stochastic_alm`.
 
 ---
 
-## 2. Stage 5a Phase 2 — Equity Sleeve and Stochastic Deckungsgrad
+## 2. Stage 5a Phase 2 — Equity Sleeve and Stochastic funding ratio
 
 Phase 2 adds an **equity allocation** modelled as a Geometric Brownian
-Motion (GBM) and a **path-dependent solvency Deckungsgrad** that values
+Motion (GBM) and a **path-dependent solvency funding ratio** that values
 that allocation at market.
 
 ### 2.1 GBM Equity Driver
@@ -141,23 +141,23 @@ to `StochasticALMAnalysis`. Independence from the short-rate driver is
 imposed by seeding GBM with `seed + 1000`; the equity path matrix is
 exposed as `salm.equity_simulation`.
 
-### 2.2 `StochasticDeckungsgradAnalysis` — Parameters
+### 2.2 `StochasticFundingRatioAnalysis` — Parameters
 
-Lives in `awesome_actus_lib.pension.analysis.stochastic_deckungsgrad`.
+Lives in `awesome_actus_lib.pension.analysis.stochastic_funding_ratio`.
 
 | Parameter            | Type                          | Meaning                                                            |
 | :------------------- | :---------------------------- | :----------------------------------------------------------------- |
 | `salm`               | `StochasticALMAnalysis`       | A run instance providing rate and (optional) equity paths.          |
 | `fund`               | `PensionFund`                 | Liability demographics at $t_0$.                                   |
-| `mortality`          | `MortalityTable`              | Used by the underlying `DeckungsgradAnalysis` for $\ddot{a}_x$.    |
+| `mortality`          | `MortalityTable`              | Used by the underlying `FundingRatioAnalysis` for $\ddot{a}_x$.    |
 | `bond_book`          | `float`                       | Book value of the bond portfolio at $t_0$.                         |
 | `cash_book`          | `float`                       | Book value of cash and equivalents at $t_0$.                       |
 | `equity_sleeve_0`    | `float`                       | Initial equity allocation at $t_0$ (mark-to-market basis).         |
 
 ### 2.3 Solvency Construction
 
-`Vorsorgekapital_t0` is the deterministic Stage-4 quantity reused
-verbatim from `DeckungsgradAnalysis` (AGH-Buchwert for actives,
+`pension capital_t0` is the deterministic Stage-4 quantity reused
+verbatim from `FundingRatioAnalysis` (AGH-Buchwert for actives,
 $P\cdot N\cdot \ddot{a}_x$ for retirees).
 
 The asset stock per path is
@@ -169,7 +169,7 @@ $$
 
 so bonds and cash stay at book value (sticky), and only the equity
 sleeve is marked to market through the GBM path. The path-dependent
-Deckungsgrad is
+funding ratio is
 
 $$
 \mathrm{DG}_i(d) \;=\; \frac{V_i(d)}{\mathrm{VK}_{t_0}}.
@@ -181,7 +181,7 @@ scalar.
 
 ### 2.4 Reporting
 
-* `deckungsgrad_distribution(as_of)` — NumPy array of $\mathrm{DG}_i(d)$
+* `funding_ratio_distribution(as_of)` — NumPy array of $\mathrm{DG}_i(d)$
   across all paths.
 * `summary(as_of)` — `mean`, `std`, percentiles, `dg_es5`,
   `p_underfunded`.
@@ -343,7 +343,7 @@ materially nonlinear funding-ratio response in the regime sampled.
 ### 3.6 Scope Caveats Specific to 5b
 
 * **Stage 5b uses the liquidity-lens funding ratio.** The Art. 44 BVV 2
-  solvency Deckungsgrad of Phase 2 is, in the current implementation,
+  solvency funding ratio of Phase 2 is, in the current implementation,
   **invariant under stochastic mortality**: `VK_{t_0}` depends only on
   $t_0$ cohort sizes and the deterministic $\ddot{a}_x$, not on the
   realised survival path. Path-dependent solvency variance from
@@ -372,7 +372,7 @@ from awesome_actus_lib.stochastic_rates import CurveCalibrator
 from awesome_actus_lib.pension import (
     PensionPolicy, Cohort, PensionFund,
     DynamicFundSimulator, Stage4Dynamics, EntryPolicy,
-    StochasticALMAnalysis, StochasticDeckungsgradAnalysis,
+    StochasticALMAnalysis, StochasticFundingRatioAnalysis,
     RiskAttribution, simulate_liability_paths,
     ek2001_2005,
 )
@@ -444,7 +444,7 @@ salm.run()
 print(salm.summary(as_of="2035-01-01"))
 
 # 6. Solvency lens (Phase 2)
-sdga = StochasticDeckungsgradAnalysis(
+sdga = StochasticFundingRatioAnalysis(
     salm=salm, fund=fund, mortality=ek2001_2005(),
     bond_book=400_000_000, cash_book=50_000_000,
     equity_sleeve_0=150_000_000,
@@ -493,7 +493,7 @@ the predecessor PA. Reused without modification:
   the flat sticky `technical_rate`. A consistent mark-to-market
   valuation would propagate each path's short rate into the discount
   factor on both sides.
-* **VK_t projection (Stage 5c).** `StochasticDeckungsgradAnalysis`
+* **VK_t projection (Stage 5c).** `StochasticFundingRatioAnalysis`
   holds `VK_{t_0}` constant; a forward-projected solvency DG would
   evolve `VK_t` (AGH roll-forward, retiree decrement, fresh
   retirements, $i_{\mathrm{tech}}$ revaluation).

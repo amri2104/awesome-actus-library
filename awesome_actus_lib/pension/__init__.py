@@ -1,13 +1,13 @@
 from .analysis.alm import ALMAnalysis
 from .analysis.conversion import (
-    PensionierungsverlustAnalysis,
+    RetirementLossAnalysis,
     annuity_due,
     technical_uws,
 )
-from .analysis.deckungsgrad import DeckungsgradAnalysis
+from .analysis.funding_ratio import FundingRatioAnalysis
 from .analysis.risk_attribution import RiskAttribution
 from .analysis.stochastic_alm import StochasticALMAnalysis
-from .analysis.stochastic_deckungsgrad import StochasticDeckungsgradAnalysis
+from .analysis.stochastic_funding_ratio import StochasticFundingRatioAnalysis
 from .cohort import Cohort
 from .entry import EntryPolicy
 from .fund import PensionFund
@@ -16,6 +16,7 @@ from .policy import PensionPolicy
 from .simulators import (
     ClosedFundSimulator,
     DynamicFundSimulator,
+    LiabilityPath,
     OpenFundSimulator,
     Stage4Dynamics,
     simulate_liability_paths,
@@ -31,14 +32,15 @@ __all__ = [
     "Stage4Dynamics",
     "EntryPolicy",
     "ALMAnalysis",
-    "DeckungsgradAnalysis",
-    "PensionierungsverlustAnalysis",
+    "FundingRatioAnalysis",
+    "RetirementLossAnalysis",
     "annuity_due",
     "technical_uws",
     "MortalityTable",
     "ek2001_2005",
     "StochasticALMAnalysis",
-    "StochasticDeckungsgradAnalysis",
+    "StochasticFundingRatioAnalysis",
     "RiskAttribution",
     "simulate_liability_paths",
+    "LiabilityPath",
 ]

@@ -53,7 +53,7 @@ Fields (defaults shown reflect Swiss BVG minima as of writing):
 
 | Field | Default | Meaning |
 |----|----|----|
-| `bvg_min_interest_rate` | `0.0125` | Statutory minimum interest credited on AGH (informational; not used directly in Stage 1 — see `applied_interest_rate`). |
+| `bvg_min_interest_rate` | `0.0125` | Statutory BVG minimum interest (Art. 15 BVG). Acts as a **floor** on the crediting rate: the fund credits `max(applied_interest_rate, bvg_min_interest_rate)` via `PensionPolicy.credited_interest_rate()`. With the baseline (applied 2.0 % > 1.25 %) the floor is inactive; it binds only if a scenario sets the applied rate below the minimum. |
 | `applied_interest_rate` | `0.02` | Actual interest rate the fund credits on accrued savings (AGH) each year. |
 | `technical_rate` | `0.0176` | Discount rate used for actuarial liability valuation. |
 | `conversion_rate` | `0.0523` | Umwandlungssatz — AGH at retirement × this = annual pension. |
@@ -425,13 +425,13 @@ fr = alm.funding_ratio(as_of="2025-01-01")
 print(f"Funding Ratio: {fr:.2%}")
 
 # Path over multiple valuation dates
-fr_path = alm.deckungsgrad_path([
+fr_path = alm.funding_ratio_path([
     "2025-01-01", "2030-01-01", "2035-01-01", "2040-01-01",
 ])
 print(fr_path)
 ```
 
-`funding_ratio` returns a scalar; `deckungsgrad_path` returns a
+`funding_ratio` returns a scalar; `funding_ratio_path` returns a
 `pandas.Series` indexed by date.
 
 **Use when:** supervisory reporting, regulatory funding-ratio

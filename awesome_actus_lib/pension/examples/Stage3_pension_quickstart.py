@@ -12,98 +12,36 @@ import os
 import pandas as pd
 
 from awesome_actus_lib import PAM, Portfolio, PublicActusService
-from awesome_actus_lib.analysis.liquidity import LiquidityAnalysis
-from awesome_actus_lib.analysis.value import ValueAnalysis
 from awesome_actus_lib.pension import (
     PensionPolicy,
     Cohort,
     PensionFund,
     ClosedFundSimulator,
-    OpenFundSimulator,
-    EntryPolicy,
     ALMAnalysis,
-    MortalityTable,
     ek2001_2005,
 )
 
 
-print("=" * 70)
-print("PENSION ALM CASE STUDY: BVG liabilities vs bond portfolio")
-print("                       Stage 3 — retiree mortality (EK 2001-2005)")
-print("=" * 70)
+HORIZON_YEARS = 40
+START_DATE = "2025-01-01T00:00:00"
+START_YEAR = int(START_DATE[:4])
+
+
+print("=" * 78)
+print("PENSION ALM CASE STUDY — Stage 3 — retiree mortality (EK 2001-2005)")
+print("=" * 78)
 
 # =============================================================================
-# 1A. PORTFOLIO DEFINITION (asset side)
+# 1A. PORTFOLIO DEFINITION (liability side) — Stage 3: closed fund + mortality
 # =============================================================================
-print("\n[1A] Portfolio Definition — assets")
-print("-" * 40)
-
-asset_portfolio = Portfolio([
-    PAM(
-        contractID="BOND_2030",
-        statusDate="2025-01-01T00:00:00",
-        contractDealDate="2025-01-01T00:00:00",
-        currency="CHF",
-        notionalPrincipal=40_000_000,
-        initialExchangeDate="2025-01-01T00:00:00",
-        maturityDate="2030-12-31T00:00:00",
-        nominalInterestRate=0.020,
-        dayCountConvention="30E360",
-        contractRole="RPA",
-        cycleOfInterestPayment="P1YL1",
-        counterpartyID="SNB",
-        creatorID="PK_ALM"
-    ),
-    PAM(
-        contractID="BOND_2040",
-        statusDate="2025-01-01T00:00:00",
-        contractDealDate="2025-01-01T00:00:00",
-        currency="CHF",
-        notionalPrincipal=35_000_000,
-        initialExchangeDate="2025-01-01T00:00:00",
-        maturityDate="2040-12-31T00:00:00",
-        nominalInterestRate=0.025,
-        dayCountConvention="30E360",
-        contractRole="RPA",
-        cycleOfInterestPayment="P1YL1",
-        counterpartyID="SNB",
-        creatorID="PK_ALM"
-    ),
-    PAM(
-        contractID="BOND_2050",
-        statusDate="2025-01-01T00:00:00",
-        contractDealDate="2025-01-01T00:00:00",
-        currency="CHF",
-        notionalPrincipal=25_000_000,
-        initialExchangeDate="2025-01-01T00:00:00",
-        maturityDate="2050-12-31T00:00:00",
-        nominalInterestRate=0.030,
-        dayCountConvention="30E360",
-        contractRole="RPA",
-        cycleOfInterestPayment="P1YL1",
-        counterpartyID="SNB",
-        creatorID="PK_ALM"
-    )
-])
-
-print(f"  Asset 1: CHF 40,000,000 bond (PAM), 2.0% coupon, matures 2030")
-print(f"  Asset 2: CHF 35,000,000 bond (PAM), 2.5% coupon, matures 2040")
-print(f"  Asset 3: CHF 25,000,000 bond (PAM), 3.0% coupon, matures 2050")
-print(f"  Total notional: CHF 100,000,000")
-
-service = PublicActusService()
-
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (liability side)  —  Stage 3: closed fund + mortality
-# =============================================================================
-print("\n[1B] Portfolio Definition — liabilities (Stage 3: closed fund + mortality)")
+print("\n[1A] Portfolio Definition — liabilities (closed fund + mortality)")
 print("-" * 40)
 
 policy = PensionPolicy()
 
 liability_fund = PensionFund(
     policy=policy,
-    start_date="2025-01-01T00:00:00",
+    start_date=START_DATE,
 )
 liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1990",
@@ -142,6 +80,68 @@ print(f"  Mortality:    EK 2001-2005 period table (retirees only, deterministic)
 
 
 # =============================================================================
+# 1B. PORTFOLIO DEFINITION (asset side)
+# =============================================================================
+print("\n[1B] Portfolio Definition — assets")
+print("-" * 40)
+
+asset_portfolio = Portfolio([
+    PAM(
+        contractID="BOND_2030",
+        statusDate=START_DATE,
+        contractDealDate=START_DATE,
+        currency="CHF",
+        notionalPrincipal=40_000_000,
+        initialExchangeDate=START_DATE,
+        maturityDate="2030-12-31T00:00:00",
+        nominalInterestRate=0.020,
+        dayCountConvention="30E360",
+        contractRole="RPA",
+        cycleOfInterestPayment="P1YL1",
+        counterpartyID="SNB",
+        creatorID="PK_ALM"
+    ),
+    PAM(
+        contractID="BOND_2040",
+        statusDate=START_DATE,
+        contractDealDate=START_DATE,
+        currency="CHF",
+        notionalPrincipal=35_000_000,
+        initialExchangeDate=START_DATE,
+        maturityDate="2040-12-31T00:00:00",
+        nominalInterestRate=0.025,
+        dayCountConvention="30E360",
+        contractRole="RPA",
+        cycleOfInterestPayment="P1YL1",
+        counterpartyID="SNB",
+        creatorID="PK_ALM"
+    ),
+    PAM(
+        contractID="BOND_2050",
+        statusDate=START_DATE,
+        contractDealDate=START_DATE,
+        currency="CHF",
+        notionalPrincipal=25_000_000,
+        initialExchangeDate=START_DATE,
+        maturityDate="2050-12-31T00:00:00",
+        nominalInterestRate=0.030,
+        dayCountConvention="30E360",
+        contractRole="RPA",
+        cycleOfInterestPayment="P1YL1",
+        counterpartyID="SNB",
+        creatorID="PK_ALM"
+    )
+])
+
+print(f"  Asset 1: CHF 40,000,000 bond (PAM), 2.0% coupon, matures 2030")
+print(f"  Asset 2: CHF 35,000,000 bond (PAM), 2.5% coupon, matures 2040")
+print(f"  Asset 3: CHF 25,000,000 bond (PAM), 3.0% coupon, matures 2050")
+print(f"  Total notional: CHF 100,000,000")
+
+service = PublicActusService()
+
+
+# =============================================================================
 # 2. EVENT GENERATION
 # =============================================================================
 print("\n[2] Event Generation")
@@ -151,7 +151,7 @@ asset_cfs = service.generateEvents(asset_portfolio)
 print(f"  Asset CashFlowStream ready: {len(asset_cfs.events_df)} events")
 
 simulator = ClosedFundSimulator(liability_fund, mortality=mortality)
-liability_cfs = simulator.run(horizon_years=40)
+liability_cfs = simulator.run(horizon_years=HORIZON_YEARS)
 print(f"  Liability CashFlowStream ready: {len(liability_cfs.events_df)} events")
 
 # Stage 3 specific: per-cohort headcount log
@@ -185,7 +185,7 @@ print(net_table.head().to_string())
 fr_t0 = alm.funding_ratio(as_of="2025-01-01")
 print(f"\n  Variant 2 — Funding Ratio @ 2025-01-01: {fr_t0:.2%}")
 
-fr_path = alm.deckungsgrad_path(["2025-01-01", "2030-01-01", "2035-01-01"])
+fr_path = alm.funding_ratio_path(["2025-01-01", "2030-01-01", "2035-01-01"])
 print("  Funding Ratio path:")
 print(fr_path.to_string())
 
@@ -249,7 +249,7 @@ ax1.bar(x, net_table["netLiquidity_liabilities"],
 ax1.bar([i + width for i in x], net_table["net"],
         width=width, label="Net", color="#264653")
 ax1.axhline(0, color="black", linewidth=0.6)
-ax1.set_title("Variant 1 — Net Liquidity per Year (Stage 3: closed fund + mortality)")
+ax1.set_title("Stage 3 — Net Liquidity per Year")
 ax1.set_ylabel("CHF")
 ax1.set_xticks(list(x))
 ax1.set_xticklabels(years, rotation=45, ha="right")
@@ -259,13 +259,13 @@ plt.tight_layout()
 _save(fig1, "v1_net_liquidity.png")
 
 # --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
-fr_dates = [f"{y}-01-01" for y in range(2025, 2061, 5)]
-fr_series = alm.deckungsgrad_path(fr_dates)
+fr_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
+fr_series = alm.funding_ratio_path(fr_dates)
 
 fig2, ax2 = plt.subplots(figsize=(10, 4))
 ax2.plot(fr_series.index, fr_series.values, marker="o", color="#264653")
 ax2.axhline(1.0, color="red", linestyle="--", linewidth=0.8, label="100% coverage")
-ax2.set_title("Variant 2 — Funding Ratio Path (Stage 3)")
+ax2.set_title("Stage 3 — Funding Ratio Path")
 ax2.set_ylabel("Funding Ratio")
 ax2.set_xlabel("Valuation Date")
 ax2.grid(True, linestyle="--", alpha=0.5)
@@ -274,24 +274,24 @@ plt.tight_layout()
 _save(fig2, "v2_funding_ratio_path.png")
 
 # --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
-fig3 = combined_cfs.plot(title="Variant 3 — Combined Asset + Liability Cashflows (Stage 3)",
+fig3 = combined_cfs.plot(title="Stage 3 — Combined Asset + Liability Cashflows",
                          return_fig=True)
 if fig3 is not None:
     _save(fig3, "v3_combined_cashflows.png")
 
-# --- Plot 5 (Stage 3 specific): Cohort headcount decline ------------------
-fig5, ax5 = plt.subplots(figsize=(12, 5))
+# --- Plot 4 (Stage 3 specific): Cohort headcount decline ------------------
+fig4, ax4 = plt.subplots(figsize=(12, 5))
 colors = {"ACTIVE_1990": "#2a9d8f", "ACTIVE_1970": "#e9c46a", "RETIRED_1955": "#e76f51"}
 for cid in cohort_hc_df["cohort_id"].unique():
     sub = cohort_hc_df[cohort_hc_df["cohort_id"] == cid]
-    ax5.plot(sub["year"], sub["headcount"], marker="o", markersize=3,
+    ax4.plot(sub["year"], sub["headcount"], marker="o", markersize=3,
              label=cid, color=colors.get(cid))
-ax5.set_title("Stage 3 — Cohort Headcount Decline (retirees decay, actives flat until retirement)")
-ax5.set_ylabel("Members (fractional)")
-ax5.set_xlabel("Year")
-ax5.grid(True, linestyle="--", alpha=0.5)
-ax5.legend()
+ax4.set_title("Stage 3 — Cohort Headcount Decline")
+ax4.set_ylabel("Members (fractional)")
+ax4.set_xlabel("Year")
+ax4.grid(True, linestyle="--", alpha=0.5)
+ax4.legend()
 plt.tight_layout()
-_save(fig5, "v5_cohort_headcount_decline.png")
+_save(fig4, "v4_cohort_headcount_decline.png")
 
 plt.show()

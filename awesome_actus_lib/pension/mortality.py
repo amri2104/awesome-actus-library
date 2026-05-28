@@ -26,17 +26,37 @@ class MortalityTable:
     """One-year death probabilities by age and gender.
 
     ``q_male`` and ``q_female`` map integer age -> q_x in [0, 1].
+
+    Optional generational (Kohorten-) projection: when ``improvement_rate``
+    > 0 and a ``base_year`` is set, the stored period ``q_x`` is projected to
+    a calendar year via the standard exponential trend
+    ``q_x(cal_year) = q_x * (1 - improvement_rate) ** (cal_year - base_year)``.
+    The projection is applied only when ``survival_probability`` is called
+    with an explicit ``cal_year``; without it the raw period table is used,
+    so the simulator's headcount decrement and all Stage 1-5b behaviour are
+    unchanged. Defaults (``improvement_rate=0.0``) reproduce the pure period
+    table exactly.
     """
     q_male: Dict[int, float]
     q_female: Dict[int, float]
+    improvement_rate: float = 0.0
+    base_year: Optional[int] = None
 
-    def survival_probability(self, age: int, gender: str) -> float:
+    def survival_probability(
+        self, age: int, gender: str, cal_year: Optional[int] = None
+    ) -> float:
         """Return 1 - q_x for the given age and gender.
 
         gender:
             "m"      -> uses q_male
             "f"      -> uses q_female
             "unisex" -> uses 0.5 * (q_male + q_female)
+
+        ``cal_year`` (optional): calendar year at which to evaluate mortality.
+        When given together with a non-zero ``improvement_rate`` and a
+        ``base_year``, the period ``q_x`` is projected generationally
+        (lower mortality in later years). Omitting it uses the raw period
+        value.
 
         Out-of-range ages return 0.0 (treat as already dead), mirroring
         the existing ``terminal_age`` boundary in the simulator.
@@ -57,6 +77,9 @@ class MortalityTable:
             )
         if q is None:
             return 0.0
+        if self.improvement_rate and cal_year is not None and self.base_year is not None:
+            q = q * (1.0 - self.improvement_rate) ** (cal_year - self.base_year)
+            q = min(max(q, 0.0), 1.0)
         return 1.0 - q
 
     @classmethod
@@ -220,9 +243,25 @@ def _read_excel_qx(pd, path, sheet: str, age_col: str, q_col: str) -> Dict[int, 
     return _df_to_qx_dict(df, age_col, q_col)
 
 
-def ek2001_2005() -> MortalityTable:
-    """Factory returning the EK 2001-2005 period mortality table."""
-    return MortalityTable(q_male=_QX_MALE_EK_0105, q_female=_QX_FEMALE_EK_0105)
+def ek2001_2005(
+    improvement_rate: float = 0.0, base_year: int = 2003
+) -> MortalityTable:
+    """Factory returning the EK 2001-2005 mortality table.
+
+    ``improvement_rate=0.0`` (default) returns the raw period table,
+    byte-identical to all earlier stages. A positive ``improvement_rate``
+    turns it into a generational table projected from ``base_year`` (the
+    2001-2005 observation midpoint, 2003): mortality is reduced by
+    ``(1 - improvement_rate)`` per calendar year, applied whenever an
+    annuity is valued with an explicit ``cal_year``. Typical Swiss
+    occupational-pension improvement assumptions are ~1.0-1.5 % p.a.
+    """
+    return MortalityTable(
+        q_male=_QX_MALE_EK_0105,
+        q_female=_QX_FEMALE_EK_0105,
+        improvement_rate=improvement_rate,
+        base_year=base_year,
+    )
 
 
 # ---------------------------------------------------------------------------

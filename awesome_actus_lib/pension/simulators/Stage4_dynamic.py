@@ -6,7 +6,7 @@ Extends Stage 2's OpenFundSimulator with:
 - piecewise BVG threshold indexation (steps every threshold_index_period years)
 - a falling applied UWS path (conversion_rate_path mapping retirement year -> rate)
 - enriched RETIREMENT_CONV events carrying age, gender, headcount_at_conversion
-  so PensionierungsverlustAnalysis can run without external metadata.
+  so RetirementLossAnalysis can run without external metadata.
 
 Defaults reproduce Stage 3 numerically (payoff/time/type values match
 exactly): salary_growth=0.0 plus conversion_rate_path=None yields the
@@ -119,7 +119,7 @@ class DynamicFundSimulator(OpenFundSimulator):
         risk_amt = policy.risk_contribution_rate * insured * cohort.headcount
         admin = policy.admin_cost_per_member * cohort.headcount
 
-        interest_pc = cohort.accrued_savings * policy.applied_interest_rate
+        interest_pc = cohort.accrued_savings * policy.credited_interest_rate()
         cohort.accrued_savings = cohort.accrued_savings + interest_pc + sav_rate * insured
 
         sink.append({"time": event_date, "type": ev.SAV_CONTRIB, "payoff": sav_amt})
@@ -144,7 +144,7 @@ class DynamicFundSimulator(OpenFundSimulator):
         cohort.annual_pension = cohort.accrued_savings * applied_uws
         cohort.status = "retired"
 
-        # Event enrichment: extra Stage-4 fields for PensionierungsverlustAnalysis.
+        # Event enrichment: extra Stage-4 fields for RetirementLossAnalysis.
         # Stage 1/2/3 consumers route by 'type'/'payoff'/'time' only, so unknown
         # fields are inert. headcount is read pre-mortality (mortality decrement
         # happens after _step_cohort returns).
