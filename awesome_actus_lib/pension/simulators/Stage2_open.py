@@ -4,6 +4,8 @@ from copy import deepcopy
 from datetime import date
 from typing import List, Optional
 
+import numpy as np
+
 from ...models.cashFlowStream import CashFlowStream
 from ..cohort import Cohort
 from ..entry import EntryPolicy
@@ -27,9 +29,23 @@ class OpenFundSimulator(ClosedFundSimulator):
     Optional Stage 3 mortality: see ClosedFundSimulator.
     """
 
-    def __init__(self, fund: PensionFund, entry_policy: EntryPolicy,
-                 mortality: Optional[MortalityTable] = None):
-        super().__init__(fund, mortality=mortality)
+    def __init__(
+        self,
+        fund: PensionFund,
+        entry_policy: EntryPolicy,
+        mortality: Optional[MortalityTable] = None,
+        *,
+        stochastic_mortality: bool = False,
+        mortality_filter: str = "all",
+        rng: Optional[np.random.Generator] = None,
+    ):
+        super().__init__(
+            fund,
+            mortality=mortality,
+            stochastic_mortality=stochastic_mortality,
+            mortality_filter=mortality_filter,
+            rng=rng,
+        )
         self.entry_policy = entry_policy
         self.headcount_log: List[dict] = []
 
@@ -40,6 +56,7 @@ class OpenFundSimulator(ClosedFundSimulator):
         start = self.fund.start_date
         self.headcount_log = []
         self.cohort_headcount_log = []
+        self._cohort_rngs = {}
 
         for year_offset in range(horizon_years):
             sim_year = start.year + year_offset

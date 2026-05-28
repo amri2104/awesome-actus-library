@@ -25,6 +25,8 @@ so no Stage 1/2 source file is touched.
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+import numpy as np
+
 from .. import events as ev
 from ..entry import EntryPolicy
 from ..fund import PensionFund
@@ -64,10 +66,25 @@ class DynamicFundSimulator(OpenFundSimulator):
     (UWS path + event enrichment).
     """
 
-    def __init__(self, fund: PensionFund, entry_policy: EntryPolicy,
-                 dynamics: Stage4Dynamics,
-                 mortality: Optional[MortalityTable] = None):
-        super().__init__(fund, entry_policy, mortality=mortality)
+    def __init__(
+        self,
+        fund: PensionFund,
+        entry_policy: EntryPolicy,
+        dynamics: Stage4Dynamics,
+        mortality: Optional[MortalityTable] = None,
+        *,
+        stochastic_mortality: bool = False,
+        mortality_filter: str = "all",
+        rng: Optional[np.random.Generator] = None,
+    ):
+        super().__init__(
+            fund,
+            entry_policy,
+            mortality=mortality,
+            stochastic_mortality=stochastic_mortality,
+            mortality_filter=mortality_filter,
+            rng=rng,
+        )
         if dynamics.threshold_index_period < 1:
             raise ValueError(
                 f"Stage4Dynamics.threshold_index_period must be >= 1, "

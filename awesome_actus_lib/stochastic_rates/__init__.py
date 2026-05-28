@@ -11,6 +11,7 @@ factory: Helper to instantiate models by name.
 
 from .factory import create_model, available_models, describe_models
 from .models.base import ShortRateModel
+from .models.gbm import GBMModel
 from .calibration.curve import CurveCalibrator
 from .simulation import SimulationResult
 from .integration import simulation_to_reference_index, simulation_to_scenarios
@@ -20,6 +21,7 @@ __all__ = [
     "available_models",
     "describe_models",
     "ShortRateModel",
+    "GBMModel",
     "CurveCalibrator",
     "SimulationResult",
     "simulation_to_reference_index",

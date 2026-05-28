@@ -9,10 +9,12 @@
 from .Stage1_closed import ClosedFundSimulator
 from .Stage2_open import OpenFundSimulator
 from .Stage4_dynamic import DynamicFundSimulator, Stage4Dynamics
+from .liability_paths import simulate_liability_paths
 
 __all__ = [
     "ClosedFundSimulator",
     "OpenFundSimulator",
     "DynamicFundSimulator",
     "Stage4Dynamics",
+    "simulate_liability_paths",
 ]

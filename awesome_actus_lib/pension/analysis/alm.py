@@ -41,7 +41,11 @@ class ALMAnalysis:
 
     def _value(self, cf: CashFlowStream, as_of: pd.Timestamp) -> float:
         original_rf = cf.riskFactors
-        if self.discount_source is not None:
+        if self.flat_rate is not None:
+            # Sticky flat discounting: temporarily clear riskFactors so ValueAnalysis
+            # doesn't crash on multiple curves and falls back to flat_rate
+            cf.riskFactors = []
+        elif self.discount_source is not None:
             cf.riskFactors = self.discount_source
         try:
             va = ValueAnalysis(

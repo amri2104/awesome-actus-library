@@ -23,10 +23,12 @@ n_paths modest (200-500) and discuss runtime honestly in the thesis text.
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
+
+from awesome_actus_lib.models.cashFlowStream import CashFlowStream
 
 from awesome_actus_lib import PublicActusService
 from awesome_actus_lib.stochastic_rates import (
@@ -48,8 +50,11 @@ class StochasticALMAnalysis:
     asset_portfolio : Portfolio
         Mixed portfolio of fixed and floating PAMs. Floating PAMs must carry
         ``marketObjectCodeOfRateReset == market_code``.
-    liabilities_cf : CashFlowStream
-        Deterministic liability stream from a (Closed/Open/Dynamic)FundSimulator.
+    liabilities_cf : CashFlowStream | List[CashFlowStream]
+        Either a single deterministic liability stream (Stage 5a Phase 1
+        convention: broadcast across all asset paths), or a list of length
+        ``n_paths`` with one path-specific liability stream per asset path
+        (Stage 5b: stochastic mortality, paired position-wise asset_i ↔ liab_i).
     calibrator : CurveCalibrator
         Calibrated initial term structure (drives drift for curve-fitting models
         and supplies flat-forward extrapolation for long horizons).
@@ -67,12 +72,13 @@ class StochasticALMAnalysis:
     def __init__(
         self,
         asset_portfolio,
-        liabilities_cf,
+        liabilities_cf: Union[CashFlowStream, List[CashFlowStream]],
         calibrator: CurveCalibrator,
         *,
         technical_rate: float,
         model: str = "hull_white",
         model_params: Optional[dict] = None,
+        equity_params: Optional[dict] = None,
         n_paths: int = 500,
         horizon_years: float = 40.0,
         steps_per_year: int = 12,
@@ -83,11 +89,22 @@ class StochasticALMAnalysis:
         verbose: bool = True,
     ):
         self.asset_portfolio = asset_portfolio
-        self.liabilities_cf = liabilities_cf
+        if isinstance(liabilities_cf, list):
+            if len(liabilities_cf) != int(n_paths):
+                raise ValueError(
+                    f"liabilities_cf list length ({len(liabilities_cf)}) "
+                    f"must match n_paths ({n_paths})"
+                )
+            self.liabilities_cf = list(liabilities_cf)
+            self._liab_is_path_list = True
+        else:
+            self.liabilities_cf = liabilities_cf
+            self._liab_is_path_list = False
         self.calibrator = calibrator
         self.technical_rate = float(technical_rate)
         self.model = model
         self.model_params = dict(model_params or {})
+        self.equity_params = dict(equity_params or {}) if equity_params is not None else None
         self.n_paths = int(n_paths)
         self.horizon_years = float(horizon_years)
         self.steps_per_year = int(steps_per_year)
@@ -98,6 +115,7 @@ class StochasticALMAnalysis:
         self.verbose = verbose
 
         self._sim = None
+        self._sim_equity = None
         self._asset_cfs: List = []  # one CashFlowStream per path
         self._ran = False
 
@@ -111,6 +129,7 @@ class StochasticALMAnalysis:
         T = self.horizon_years
         M = int(round(T * self.steps_per_year))
 
+        # 1. Simulate interest rates
         params = dict(self.model_params)
         if "r0" not in params:
             raise ValueError("model_params must include 'r0' (initial short rate).")
@@ -120,11 +139,25 @@ class StochasticALMAnalysis:
         model = create_model(self.model, seed=self.seed, **params)
         self._sim = model.simulate(T=T, M=M, I=self.n_paths)
 
+        # 2. Simulate equities if params provided (independent but reproducible seed)
+        if self.equity_params:
+            from awesome_actus_lib.stochastic_rates.models.gbm import GBMModel
+            S0 = self.equity_params.get("S0", 100.0)
+            mu = self.equity_params.get("mu", 0.05)
+            sigma = self.equity_params.get("sigma", 0.15)
+            
+            gbm_seed = self.seed + 1000 if self.seed is not None else None
+            gbm_model = GBMModel(S0=S0, mu=mu, sigma=sigma, seed=gbm_seed)
+            self._sim_equity = gbm_model.simulate(T=T, M=M, I=self.n_paths)
+
         freq = "M" if self.steps_per_year == 12 else "Y"
 
         if self.verbose:
             print(f"  [StochasticALM] model={self.model}  paths={self.n_paths}  "
                   f"T={T:g}y  M={M}  freq={freq}")
+            if self._sim_equity is not None:
+                print(f"  [StochasticALM] equity_model=gbm  S0={self.equity_params.get('S0')}  "
+                      f"mu={self.equity_params.get('mu')}  sigma={self.equity_params.get('sigma')}")
             print(f"  [StochasticALM] generating {self.n_paths} ACTUS scenarios "
                   f"(one service call each)...")
 
@@ -132,14 +165,28 @@ class StochasticALMAnalysis:
         for i in range(self.n_paths):
             if self.verbose and (i + 1) % 100 == 0:
                 print(f"    scenario {i + 1}/{self.n_paths}")
-            rf = simulation_to_reference_index(
+                
+            rf_rates = simulation_to_reference_index(
                 self._sim,
                 base_date=self.base_date,
                 market_code=self.market_code,
                 path=i,
                 freq=freq,
             )
-            asset_cfs_i = self.service.generateEvents(self.asset_portfolio, riskFactors=[rf])
+            
+            risk_factors = [rf_rates]
+            
+            if self._sim_equity is not None:
+                rf_equity = simulation_to_reference_index(
+                    self._sim_equity,
+                    base_date=self.base_date,
+                    market_code="EQ_INDEX",
+                    path=i,
+                    freq=freq,
+                )
+                risk_factors.append(rf_equity)
+                
+            asset_cfs_i = self.service.generateEvents(self.asset_portfolio, riskFactors=risk_factors)
             self._asset_cfs.append(asset_cfs_i)
 
         self._ran = True
@@ -159,9 +206,13 @@ class StochasticALMAnalysis:
         self._check_ran()
         ratios = np.empty(self.n_paths, dtype=float)
         for i, asset_cfs_i in enumerate(self._asset_cfs):
+            liab_i = (
+                self.liabilities_cf[i] if self._liab_is_path_list
+                else self.liabilities_cf
+            )
             alm = ALMAnalysis(
                 assets_cf=asset_cfs_i,
-                liabilities_cf=self.liabilities_cf,
+                liabilities_cf=liab_i,
                 flat_rate=self.technical_rate,
             )
             ratios[i] = alm.funding_ratio(as_of=as_of)
@@ -209,3 +260,9 @@ class StochasticALMAnalysis:
         """The underlying SimulationResult (short-rate path matrix)."""
         self._check_ran()
         return self._sim
+
+    @property
+    def equity_simulation(self):
+        """The underlying SimulationResult (equity price path matrix)."""
+        self._check_ran()
+        return self._sim_equity

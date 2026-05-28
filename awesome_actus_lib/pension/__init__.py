@@ -5,7 +5,9 @@ from .analysis.conversion import (
     technical_uws,
 )
 from .analysis.deckungsgrad import DeckungsgradAnalysis
+from .analysis.risk_attribution import RiskAttribution
 from .analysis.stochastic_alm import StochasticALMAnalysis
+from .analysis.stochastic_deckungsgrad import StochasticDeckungsgradAnalysis
 from .cohort import Cohort
 from .entry import EntryPolicy
 from .fund import PensionFund
@@ -16,6 +18,7 @@ from .simulators import (
     DynamicFundSimulator,
     OpenFundSimulator,
     Stage4Dynamics,
+    simulate_liability_paths,
 )
 
 __all__ = [
@@ -35,4 +38,7 @@ __all__ = [
     "MortalityTable",
     "ek2001_2005",
     "StochasticALMAnalysis",
+    "StochasticDeckungsgradAnalysis",
+    "RiskAttribution",
+    "simulate_liability_paths",
 ]
