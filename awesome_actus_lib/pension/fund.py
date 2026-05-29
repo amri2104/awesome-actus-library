@@ -8,11 +8,6 @@ from .policy import PensionPolicy
 
 
 class _DummyPortfolio:
-    """Duck-typed Portfolio replacement for CashFlowStream consumption.
-
-    CashFlowStream uses __len__ in __str__ and accesses .contracts in plot().
-    Analysis classes pass it through but do not inspect it.
-    """
 
     def __init__(self, cohorts: List[Cohort]):
         self.contracts = list(cohorts)

@@ -1,21 +1,3 @@
-"""Stage 3 — mortality tables and survival probability helper.
-
-Period mortality table EK 2001-2005 (Swiss pension-actuarial reference,
-"Erfahrungstafeln Kollektivversicherung", evaluation period 2001-2005).
-Constants below are extracted once from
-
-    awesome_actus_lib/pension/mortality_tables_EK.xlsx
-
-sheets "EKM 0105" (men) and "EKF 0105" (women), columns ``x`` and ``qx``
-(one-year death probability). The other sheets (EKM 95, EKF 95,
-qx-Grafiken) and all commutation columns (lx, dx, Dx, Nx, ...) are
-ignored. The Excel file is kept in the repo for traceability; this
-module has no runtime Excel dependency.
-
-This is a **period** table: it does not encode calendar-year mortality
-improvement. A future stage may layer an improvement factor on top.
-"""
-
 import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -23,20 +5,6 @@ from typing import Dict, Optional
 
 @dataclass(frozen=True)
 class MortalityTable:
-    """One-year death probabilities by age and gender.
-
-    ``q_male`` and ``q_female`` map integer age -> q_x in [0, 1].
-
-    Optional generational (Kohorten-) projection: when ``improvement_rate``
-    > 0 and a ``base_year`` is set, the stored period ``q_x`` is projected to
-    a calendar year via the standard exponential trend
-    ``q_x(cal_year) = q_x * (1 - improvement_rate) ** (cal_year - base_year)``.
-    The projection is applied only when ``survival_probability`` is called
-    with an explicit ``cal_year``; without it the raw period table is used,
-    so the simulator's headcount decrement and all Stage 1-5b behaviour are
-    unchanged. Defaults (``improvement_rate=0.0``) reproduce the pure period
-    table exactly.
-    """
     q_male: Dict[int, float]
     q_female: Dict[int, float]
     improvement_rate: float = 0.0
@@ -45,22 +13,6 @@ class MortalityTable:
     def survival_probability(
         self, age: int, gender: str, cal_year: Optional[int] = None
     ) -> float:
-        """Return 1 - q_x for the given age and gender.
-
-        gender:
-            "m"      -> uses q_male
-            "f"      -> uses q_female
-            "unisex" -> uses 0.5 * (q_male + q_female)
-
-        ``cal_year`` (optional): calendar year at which to evaluate mortality.
-        When given together with a non-zero ``improvement_rate`` and a
-        ``base_year``, the period ``q_x`` is projected generationally
-        (lower mortality in later years). Omitting it uses the raw period
-        value.
-
-        Out-of-range ages return 0.0 (treat as already dead), mirroring
-        the existing ``terminal_age`` boundary in the simulator.
-        """
         if gender == "m":
             q = self.q_male.get(age)
         elif gender == "f":
@@ -93,21 +45,7 @@ class MortalityTable:
         age_col: str = "x",
         q_col: str = "qx",
     ) -> "MortalityTable":
-        """Build a MortalityTable from an Excel workbook.
 
-        Modes (exactly one must be used):
-            - gendered: pass both ``male_sheet`` and ``female_sheet``
-            - unisex:   pass ``unisex_sheet`` (q_male = q_female).
-
-        If only one of (male_sheet, female_sheet) is given, the supplied
-        gender is mirrored to the other and a warning is emitted.
-
-        ``age_col`` and ``q_col`` are the column names within each sheet.
-        Defaults match the EK 2001-2005 workbook ("x" and "qx").
-
-        Pandas is imported lazily so the rest of this module stays
-        dependency-free.
-        """
         import pandas as pd  # lazy
 
         if unisex_sheet is not None:
@@ -158,14 +96,7 @@ class MortalityTable:
         male_value: str = "m",
         female_value: str = "f",
     ) -> "MortalityTable":
-        """Build a MortalityTable from a CSV file.
 
-        If ``gender_col`` is set, rows are split by that column into
-        male/female (matched against ``male_value`` / ``female_value``).
-        Otherwise the file is treated as unisex (q_male = q_female).
-
-        Pandas is imported lazily.
-        """
         import pandas as pd  # lazy
 
         df = pd.read_csv(path)
@@ -217,15 +148,10 @@ def _df_to_qx_dict(df, age_col: str, q_col: str) -> Dict[int, float]:
 
 
 def _read_excel_qx(pd, path, sheet: str, age_col: str, q_col: str) -> Dict[int, float]:
-    # EK workbook layout: row 0 = title + "Zinssatz i:" cell, row 1 = column
-    # numbers (1..11), row 2 = column headers (x, qx, lx, ...). Use header=2.
+
     df = pd.read_excel(path, sheet_name=sheet, header=2)
     cols = list(df.columns)
-    # Positional fallback: the EK workbook female sheet uses gender-specific
-    # column names ("y", "qy") instead of the male sheet's ("x", "qx"). When
-    # the requested names are not present but the sheet has >= 2 columns,
-    # fall back to the first two columns (age, qx) and warn so the caller
-    # knows what happened.
+
     if age_col not in cols or q_col not in cols:
         if len(cols) >= 2:
             warnings.warn(
@@ -246,16 +172,7 @@ def _read_excel_qx(pd, path, sheet: str, age_col: str, q_col: str) -> Dict[int, 
 def ek2001_2005(
     improvement_rate: float = 0.0, base_year: int = 2003
 ) -> MortalityTable:
-    """Factory returning the EK 2001-2005 mortality table.
 
-    ``improvement_rate=0.0`` (default) returns the raw period table,
-    byte-identical to all earlier stages. A positive ``improvement_rate``
-    turns it into a generational table projected from ``base_year`` (the
-    2001-2005 observation midpoint, 2003): mortality is reduced by
-    ``(1 - improvement_rate)`` per calendar year, applied whenever an
-    annuity is valued with an explicit ``cal_year``. Typical Swiss
-    occupational-pension improvement assumptions are ~1.0-1.5 % p.a.
-    """
     return MortalityTable(
         q_male=_QX_MALE_EK_0105,
         q_female=_QX_FEMALE_EK_0105,
@@ -263,11 +180,6 @@ def ek2001_2005(
         base_year=base_year,
     )
 
-
-# ---------------------------------------------------------------------------
-# Hardcoded q_x constants (extracted from the EK 2001-2005 workbook).
-# Ages 0..127. Values 0..1. See module docstring for source.
-# ---------------------------------------------------------------------------
 
 _QX_MALE_EK_0105: Dict[int, float] = {
     0: 0.005338,

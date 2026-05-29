@@ -1,5 +1,3 @@
-"""Stage 2 — open fund simulator with deterministic new entrants."""
-
 from copy import deepcopy
 from datetime import date
 from typing import List, Optional
@@ -15,19 +13,6 @@ from .Stage1_closed import ClosedFundSimulator
 
 
 class OpenFundSimulator(ClosedFundSimulator):
-    """Stage 2 simulator: open fund with deterministic annual new entrants.
-
-    At the start of each simulation year, one new Cohort (accrued_savings=0)
-    is created and added to the working cohort list. Inherited _step_cohort
-    machinery handles contributions, retirement, and pensions identically for
-    both original and new-entrant cohorts.
-
-    After run(), headcount_log contains per-year active/retired headcounts
-    (aggregated), and cohort_headcount_log contains per-cohort per-year
-    headcount (inherited from ClosedFundSimulator).
-
-    Optional Stage 3 mortality: see ClosedFundSimulator.
-    """
 
     def __init__(
         self,

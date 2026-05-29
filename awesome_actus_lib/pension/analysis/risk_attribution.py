@@ -1,42 +1,3 @@
-"""Stage 5b — empirical risk attribution for the liquidity funding ratio.
-
-Five configurations (a)-(e) sweep the two stochastic axes (asset side =
-floater resets, liability side = binomial cohort transitions) on/off and
-quantify each source's contribution to the variance of the liquidity-sense
-funding ratio:
-
-    (a) baseline                 — deterministic assets, deterministic mortality
-    (b) mortality retirees only  — deterministic assets, binomial on retirees
-    (c) mortality all cohorts    — deterministic assets, binomial on actives+retirees
-    (d) assets only              — stochastic assets, deterministic mortality
-    (e) full                     — stochastic assets, binomial on actives+retirees
-
-Important scoping notes (also documented at module level for Stage 5b):
-
-* The Stage-1 ALMAnalysis funding ratio is the **liquidity-sense** net-CF
-  diagnostic (NPV(assets) / |NPV(net liability CF)|), not the regulatory
-  Art-44-BVV2 solvency funding ratio. Stochastic mortality moves the
-  liquidity ratio because pension-payout cashflows scale with surviving
-  headcount. The solvency funding ratio @ t0 (Stage 4 / Stage 5a Phase 2
-  FundingRatioAnalysis) is **invariant** under stochastic mortality —
-  PC_t0 depends only on t0 cohort sizes and the deterministic annuity ä_x,
-  not on the realised survival path. Mortality-driven variance in the
-  projected (path-dependent) solvency funding ratio requires forward
-  projection of PC_t and is identified as Stage 5c.
-
-* Survivor benefits (widow/widower pension, orphan pension, death benefit)
-  are NOT modelled. When an active member dies, their AGH is removed from
-  the liability side without a corresponding asset-side payout. This
-  introduces a small upward bias in funded-ratio paths with high active-
-  cohort mortality. A full survivor-benefit module is identified for
-  future work.
-
-* This stage models idiosyncratic mortality risk only via binomial cohort
-  transitions (Maffra/Armstrong/Pennanen 2021, Eq. 1). Systemic longevity
-  risk — stochastic evolution of the survival-probability risk factors
-  v_t in their Section 2.1 framework — is not modelled.
-"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union
@@ -59,16 +20,6 @@ from .stochastic_alm import StochasticALMAnalysis
 
 
 class RiskAttribution:
-    """Empirical variance decomposition of the liquidity funding ratio.
-
-    Each ``run_*`` method returns a length-``n_paths`` numpy array of
-    funding-ratio realisations under one of the five configurations. The
-    asset stochastic stream and the liability stochastic stream share no
-    seed entropy (separate ``np.random.SeedSequence`` chains), so the
-    additivity identity
-        Var(full) ≈ Var(assets_only) + Var(mortality_all_cohorts)
-    holds up to linearisation noise of the funding ratio FR = A / |L|.
-    """
 
     def __init__(
         self,
@@ -117,7 +68,6 @@ class RiskAttribution:
         self._liab_paths_retirees: Optional[List[CashFlowStream]] = None
         self._liab_paths_all: Optional[List[CashFlowStream]] = None
 
-    # ----------------------------------------------------------- ensure caches
     def _ensure_det_assets(self) -> None:
         if self._det_asset_cfs is not None:
             return
@@ -154,7 +104,7 @@ class RiskAttribution:
                   f"(model={self.model})")
         salm = StochasticALMAnalysis(
             asset_portfolio=self.asset_portfolio,
-            liabilities_cf=self._det_liab_cfs,  # not used here — only need _asset_cfs
+            liabilities_cf=self._det_liab_cfs,  
             calibrator=self.calibrator,
             technical_rate=self.technical_rate,
             model=self.model,
@@ -199,7 +149,6 @@ class RiskAttribution:
             self._liab_paths_all = paths
         return paths
 
-    # -------------------------------------------------------- pair-wise FR
     def _pair_fr(
         self,
         asset: Union[CashFlowStream, List[CashFlowStream]],
@@ -218,7 +167,6 @@ class RiskAttribution:
             ratios[i] = alm.funding_ratio(as_of=as_of)
         return ratios
 
-    # ------------------------------------------------------------- five configs
     def run_baseline(self, as_of: Optional[str] = None) -> np.ndarray:
         as_of = as_of or self.base_date
         self._ensure_det_assets()
@@ -255,7 +203,6 @@ class RiskAttribution:
         liab = self._ensure_liab_paths("all")
         return self._pair_fr(self._stoch_asset_cfs, liab, as_of)
 
-    # ------------------------------------------------------------- attribution
     def attribution(self, as_of: Optional[str] = None) -> Dict[str, Any]:
         as_of = as_of or self.base_date
         dists = {

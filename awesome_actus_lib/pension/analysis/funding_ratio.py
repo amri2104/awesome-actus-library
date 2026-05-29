@@ -1,27 +1,3 @@
-"""Stage 4 — Art-44-BVV2-style funding ratio at the valuation date t0.
-
-The existing ``ALMAnalysis.funding_ratio`` discounts a **net** liability
-cashflow stream (contributions minus pension payments minus admin). That
-ratio is mix-sensitive and is **not** a regulatory funding ratio in the
-sense of Art. 44 BVV2.
-
-The correct funding ratio uses
-
-    funding_ratio_t0 = pension_assets / pension_capital_t0
-
-where the pension capital is built from the **fund state at t0** (not
-from projected events):
-
-    active cohort : pc_contribution = accrued_savings * headcount       (AGH-based)
-    retired cohort: pc_contribution = annual_pension * headcount * ä_x  (PV of future pensions)
-
-with ä_x = annuity_due(age_at_t0, gender, technical_rate, mortality,
-terminal_age) reused from ``conversion.py``.
-
-This is a **t0-only** view. A time-varying funding-ratio path would
-require projecting AGH and headcount forward (Tier 2 — not implemented).
-"""
-
 import pandas as pd
 
 from ..fund import PensionFund
@@ -30,20 +6,7 @@ from .conversion import annuity_due
 
 
 class FundingRatioAnalysis:
-    """Compute the BVV2-Art-44-style funding ratio at t0 from a PensionFund.
-
-    Parameters
-    ----------
-    fund:
-        the PensionFund whose cohorts define the pension capital at
-        fund.start_date.
-    mortality:
-        MortalityTable used for ä_x on retired cohorts. Must not be None
-        if any cohort has status == "retired".
-    pension_assets:
-        market value of assets at t0 (e.g. Σ Bond-Notionals at par).
-    """
-
+    
     def __init__(self, fund: PensionFund, mortality: MortalityTable,
                  pension_assets: float):
         has_retired = any(c.status == "retired" for c in fund.cohorts)

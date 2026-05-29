@@ -41,15 +41,4 @@ class PensionPolicy:
         return 0.0
 
     def credited_interest_rate(self) -> float:
-        """Effective rate credited to AGH each year = applied rate, floored
-        at the statutory BVG minimum (Art. 15 BVG).
-
-        In a real fund the minimum binds only on the *mandatory* part of the
-        retirement assets. This single-AGH-pot model has no mandatory/extra-
-        mandatory split, so the floor is applied to the whole AGH — the
-        faithful simplification given the model's scope. With the baseline
-        (applied 2.0% > min 1.25%) the floor is inactive and this equals
-        ``applied_interest_rate``; it only bites if a scenario sets the
-        applied rate below the statutory minimum.
-        """
         return max(self.applied_interest_rate, self.bvg_min_interest_rate)

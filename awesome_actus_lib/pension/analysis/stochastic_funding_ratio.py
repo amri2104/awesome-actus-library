@@ -30,22 +30,7 @@ def _find_index_for_date(sim, base_date: str, target_date: str, freq_key: str = 
 
 
 class StochasticFundingRatioAnalysis:
-    """Stochastic solvency funding ratio (Art. 44 BVV2).
 
-    Two modes:
-
-    * **t0-only / legacy** (``liab_paths=None``): the obligation is the
-      deterministic pension capital at t0; the asset side varies only
-      through the equity GBM sleeve. This reproduces the Stage 5a Phase 2
-      behaviour exactly (regression-tested elsewhere).
-    * **Forward / Stage 5c** (``liab_paths`` supplied): both numerator
-      and denominator become path-dependent over time. ``PC_t,i`` is
-      built from the path's survivor trace and the sticky technical
-      annuity ``ä_x``; ``V_t,i`` is the book-rolled assets plus the
-      equity GBM. The same ``LiabilityPath[i]`` drives both PC survivors
-      and the pension outflow leg in V — this is the coupling the
-      stage-5b mortality finally feeds into the regulatory headline.
-    """
 
     def __init__(
         self,
@@ -58,28 +43,7 @@ class StochasticFundingRatioAnalysis:
         equity_sleeve_0: float,
         liab_paths: Optional[List[LiabilityPath]] = None,
     ):
-        """
-        Parameters
-        ----------
-        salm : StochasticALMAnalysis
-            The run stochastics manager (must already have ``.run()`` been
-            called before any result-producing method).
-        fund : PensionFund
-            The PensionFund representing the liability demographics at t0.
-        mortality : MortalityTable
-            MortalityTable used to value retired cohorts' liability
-            present value (sticky deterministic technical rate, Stage 5c-locked).
-        bond_book : float
-            Total book value of bond portfolio at t0.
-        cash_book : float
-            Total book value of cash/liquid portfolio at t0.
-        equity_sleeve_0 : float
-            Initial equity allocation at t0 (the GBM sleeve scale).
-        liab_paths : Optional[List[LiabilityPath]]
-            Stage 5c hook. If supplied, must be paired position-wise with
-            the ``salm`` asset paths (same path index = same scenario).
-            None falls back to the legacy frozen-PC_t0 denominator.
-        """
+        
         self.salm = salm
         self.fund = fund
         self.mortality = mortality
@@ -107,7 +71,6 @@ class StochasticFundingRatioAnalysis:
     def pension_capital_t0(self) -> float:
         return self._pc_t0
 
-    # ------------------------------------------------------------------ legacy
     def _legacy_distribution(self, as_of: str) -> np.ndarray:
         """Stage 5a Phase 2 behaviour: V_i(d) / PC_t0 with frozen denominator."""
         sim_equity = self.salm.equity_simulation
@@ -127,7 +90,7 @@ class StochasticFundingRatioAnalysis:
         V_i = self.bond_book + self.cash_book + equity_value
         return V_i / self._pc_t0
 
-    # ------------------------------------------------------- forward (Stage 5c)
+
     def _equity_value(self, as_of: str, path_i: int) -> float:
         sim_equity = self.salm.equity_simulation
         if sim_equity is None or sim_equity.rates.std() < 1e-12:
@@ -139,25 +102,7 @@ class StochasticFundingRatioAnalysis:
         return self.equity_sleeve_0 * (S_i / S0)
 
     def _path_V(self, as_of: str, path_i: int) -> float:
-        """Book-rolled asset value V_t,i for path i at as_of.
 
-        V_t,i = bond_book + cash_book
-                + Σ(bond interest income up to t, path i)   # IP events only
-                + Σ(net liability CF up to t, path i)       # SAV_CONTRIB − pensions − admin
-                + equity_value_i(t)                          # GBM sleeve
-        Bond principal redemption (MD) is intentionally excluded: under
-        book accounting the par sits inside ``bond_book`` from t0 onwards
-        and shifts to cash at maturity without changing the total. IED
-        (initial principal exchange at t0) is excluded for the same reason.
-
-        RISK_CONTRIB is excluded from the net liability CF: risk
-        contributions fund death/disability benefits that this model does
-        not pay out, so rolling them into the asset stock would credit the
-        fund with an unmatched inflow and bias the forward funding ratio
-        upward over the horizon. Dropping them keeps the Art-44 numerator
-        consistent with the scope claim that RISK_CONTRIB does not affect
-        the solvency funding ratio.
-        """
         as_of_ts = pd.to_datetime(as_of)
         base_ts = pd.to_datetime(self.salm.base_date)
 
@@ -174,8 +119,6 @@ class StochasticFundingRatioAnalysis:
             net_liab = 0.0
         else:
             ltimes = pd.to_datetime(liab_df["time"])
-            # RISK_CONTRIB excluded: unmatched inflow (no death/disability
-            # payout modelled) — see method docstring.
             mask_l = (
                 (ltimes > base_ts)
                 & (ltimes <= as_of_ts)
@@ -187,13 +130,6 @@ class StochasticFundingRatioAnalysis:
         return self.bond_book + self.cash_book + bond_income + net_liab + eq
 
     def _path_PC(self, as_of: str, path_i: int) -> float:
-        """Per-path forward pension capital at as_of.
-
-        For as_of within the start year we collapse to the deterministic
-        PC_t0 (the headcount_trace's first snapshot is end-of-year 1, which
-        is *after* t0). For later valuation dates we use the end-of-prior-
-        year survivor snapshot in the trace.
-        """
         as_of_year = pd.to_datetime(as_of).year
         start_year = self.fund.start_date.year
         if as_of_year <= start_year:
@@ -226,7 +162,7 @@ class StochasticFundingRatioAnalysis:
                 pc += row["annual_pension_per_capita"] * n * ax
         return pc
 
-    # ----------------------------------------------------------------- results
+    
     def funding_ratio_distribution(self, as_of: str) -> np.ndarray:
         """Solvency funding-ratio distribution at ``as_of`` across all paths.
 

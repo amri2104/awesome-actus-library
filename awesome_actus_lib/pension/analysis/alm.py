@@ -11,12 +11,6 @@ DiscountSource = Union[ReferenceIndex, YieldCurve, List[Union[ReferenceIndex, Yi
 
 
 class ALMAnalysis:
-    """Joint analysis of asset and liability cashflows.
-
-    Liability cashflows are produced by ClosedFundSimulator. Assets come
-    from a normal AAL ActusService.generateEvents() call. Both must share
-    a consistent valuation context (same discount source).
-    """
 
     def __init__(
         self,
@@ -42,8 +36,6 @@ class ALMAnalysis:
     def _value(self, cf: CashFlowStream, as_of: pd.Timestamp) -> float:
         original_rf = cf.riskFactors
         if self.flat_rate is not None:
-            # Sticky flat discounting: temporarily clear riskFactors so ValueAnalysis
-            # doesn't crash on multiple curves and falls back to flat_rate
             cf.riskFactors = []
         elif self.discount_source is not None:
             cf.riskFactors = self.discount_source
@@ -64,8 +56,6 @@ class ALMAnalysis:
         npv_liab = self._value(self.liabilities_cf, as_of_ts)
         if npv_liab is None or npv_liab == 0:
             raise ValueError("Liability NPV is zero or None; cannot compute funding ratio.")
-        # Liabilities net cashflow is negative when obligations dominate.
-        # Funding ratio = assets / |obligations|.
         return npv_assets / abs(npv_liab)
 
     def funding_ratio_path(self, dates) -> pd.Series:

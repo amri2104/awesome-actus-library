@@ -1,27 +1,3 @@
-"""Stage 4 — deterministic time-varying parameters.
-
-Extends Stage 2's OpenFundSimulator with:
-
-- annual salary growth (geometric, factor (1+g)^t)
-- piecewise BVG threshold indexation (steps every threshold_index_period years)
-- a falling applied UWS path (conversion_rate_path mapping retirement year -> rate)
-- enriched RETIREMENT_CONV events carrying age, gender, headcount_at_conversion
-  so RetirementLossAnalysis can run without external metadata.
-
-Defaults reproduce Stage 3 numerically (payoff/time/type values match
-exactly): salary_growth=0.0 plus conversion_rate_path=None yields the
-same numerical output as Stage 3. The RETIREMENT_CONV event dict is
-not byte-identical — Stage 4 always carries three additive fields
-(age_at_conversion, gender, headcount_at_conversion) — but downstream
-analyses (ALMAnalysis/LiquidityAnalysis/ValueAnalysis) route by
-type/payoff/time only, so the additive fields are inert.
-
-Only _emit_active and _emit_retirement are overridden — run() is inherited
-from Stage 1/2 unchanged. sim_year is reconstructed from arguments already
-in the parent signatures (cohort.birth_year + age, or int(event_date[:4]))
-so no Stage 1/2 source file is touched.
-"""
-
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -36,35 +12,12 @@ from .Stage2_open import OpenFundSimulator
 
 @dataclass(frozen=True)
 class Stage4Dynamics:
-    """Configuration for Stage-4 deterministic time-varying parameters.
-
-    salary_growth:
-        annual geometric growth rate of gross_salary; 0.0 disables growth.
-    conversion_rate_path:
-        optional mapping {retirement_year -> applied_uws} with
-        step-held-forward lookup: at retirement year y the applied UWS is
-        path[max(k in path with k <= y)]; before the first key the
-        fallback is policy.conversion_rate. None disables the path
-        entirely (always policy.conversion_rate).
-    threshold_index_period:
-        BVG thresholds (min/max salary, coordination deduction) step
-        upward every k years by (1+salary_growth)**k. k=1 ⇒ smooth
-        annual indexation, large k ⇒ effectively frozen thresholds.
-    """
     salary_growth: float = 0.0
     conversion_rate_path: Optional[Dict[int, float]] = None
     threshold_index_period: int = 5
 
 
 class DynamicFundSimulator(OpenFundSimulator):
-    """Stage 4 simulator: open fund + Stage-3 mortality + deterministic
-    time-varying salary growth and UWS path.
-
-    Inherits run(), _step_cohort, _emit_pension, _apply_mortality and
-    the cohort_headcount_log/headcount_log from Stage 1/2. Overrides only
-    _emit_active (salary growth + indexed thresholds) and _emit_retirement
-    (UWS path + event enrichment).
-    """
 
     def __init__(
         self,
@@ -143,11 +96,6 @@ class DynamicFundSimulator(OpenFundSimulator):
 
         cohort.annual_pension = cohort.accrued_savings * applied_uws
         cohort.status = "retired"
-
-        # Event enrichment: extra Stage-4 fields for RetirementLossAnalysis.
-        # Stage 1/2/3 consumers route by 'type'/'payoff'/'time' only, so unknown
-        # fields are inert. headcount is read pre-mortality (mortality decrement
-        # happens after _step_cohort returns).
         sink.append({
             "time": event_date,
             "type": ev.RETIREMENT_CONV,

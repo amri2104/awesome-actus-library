@@ -1,28 +1,3 @@
-"""Stage 5b — Monte-Carlo liability cashflow paths.
-
-Generates ``n_paths`` independent liability ``CashFlowStream`` realisations
-under binomial cohort transitions (Maffra/Armstrong/Pennanen 2021 Eq. 1)
-applied uniformly across cohorts. Path independence is guaranteed via
-``numpy.random.SeedSequence(seed).spawn(n_paths)``: each path gets its own
-spawned ``Generator``, and inside each simulator the per-cohort RNGs are
-further spawned from that path's master rng (see
-``ClosedFundSimulator._get_cohort_rng``).
-
-This is a pure-Python loop: no network calls, no ACTUS service round-trips.
-The bottleneck is the per-path simulator pass over all cohorts and years.
-
-Stage 5c addition: when ``return_headcount_log=True`` the function returns
-``List[LiabilityPath]`` instead of ``List[CashFlowStream]``. Each
-``LiabilityPath`` bundles the path's cashflows with a ``headcount_trace``
-giving per-year, per-cohort survivor counts plus the cohort metadata
-required to value VK_t,i forward (age via birth_year, gender, accrued AGH
-per capita for actives, annual pension per capita for retirees). The trace
-is built from ``DynamicFundSimulator.cohort_headcount_log`` and from the
-existing per-capita fields on the liability CashFlowStream events — no new
-state is added to the simulator itself, so Stage 1-5b behaviour is
-unaffected.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -40,29 +15,6 @@ from .Stage4_dynamic import DynamicFundSimulator, Stage4Dynamics
 
 @dataclass(frozen=True)
 class LiabilityPath:
-    """One stochastic-mortality liability path.
-
-    Attributes
-    ----------
-    cashflows:
-        The path's liability ``CashFlowStream`` (same object the Stage 5b
-        list-return mode produces).
-    headcount_trace:
-        ``List[dict]`` with one entry per (sim_year, cohort_id). Each dict
-        carries:
-          - ``year``: simulation year (end-of-year snapshot)
-          - ``cohort_id``: cohort identifier
-          - ``birth_year``: cohort's birth year (for age-at-t lookup)
-          - ``gender``: ``"m"`` / ``"f"`` / ``"unisex"``
-          - ``status``: ``"active"`` or ``"retired"`` at end of that year
-          - ``headcount``: surviving headcount at end of that year (post
-            mortality decrement)
-          - ``agh_per_capita``: per-capita accrued AGH at end of that year
-            (active cohorts; for retirees it freezes at conversion-time
-            value)
-          - ``annual_pension_per_capita``: per-capita annual pension once
-            retired, ``0.0`` while active.
-    """
 
     cashflows: CashFlowStream
     headcount_trace: List[Dict]
@@ -74,14 +26,6 @@ def _build_headcount_trace(
     fund: PensionFund,
     entry_policy: EntryPolicy,
 ) -> List[Dict]:
-    """Enrich ``simulator.cohort_headcount_log`` with cohort metadata.
-
-    Pulls per-capita AGH from INTEREST_CREDIT events and per-capita
-    annual pension from RETIREMENT_CONV events — both already emitted
-    by the DynamicFundSimulator. New-entrant cohort metadata (birth_year,
-    gender) is reconstructed from the ``ENTRY_{year}_AGE{age}`` id pattern
-    plus ``entry_policy``. Original cohorts are taken from ``fund.cohorts``.
-    """
     cohort_meta: Dict[str, Tuple[int, str, float, float]] = {}
     for c in fund.cohorts:
         cohort_meta[c.cohort_id] = (
@@ -114,7 +58,7 @@ def _build_headcount_trace(
         cid = entry["cohort_id"]
         year = int(entry["year"])
         if cid not in cohort_meta:
-            # New entrant -- reconstruct meta from id + entry_policy.
+            # New entrant
             try:
                 _, entry_year_str, age_token = cid.split("_")
                 entry_year = int(entry_year_str)
@@ -163,38 +107,6 @@ def simulate_liability_paths(
     mortality_filter: str = "all",
     return_headcount_log: bool = False,
 ):
-    """Return ``n_paths`` independent stochastic-mortality liability streams.
-
-    Parameters
-    ----------
-    fund, entry_policy, dynamics, mortality
-        Same building blocks as a standard ``DynamicFundSimulator`` run.
-    horizon_years
-        Simulation horizon in years.
-    n_paths
-        Number of Monte-Carlo paths to generate.
-    seed
-        Master seed. ``None`` uses non-reproducible entropy.
-    mortality_filter
-        ``"all"`` (default): binomial decrement applied to active AND
-        retired cohorts each year. ``"retirees"``: binomial decrement
-        only on retired cohorts (matches the Stage-3 deterministic scope
-        but with stochastic draws); actives remain at fixed headcount.
-    return_headcount_log
-        Stage 5c switch. ``False`` (default) keeps the byte-identical
-        Stage-5b return type (``List[CashFlowStream]``). ``True`` returns
-        ``List[LiabilityPath]`` with the per-path survivor trace bundled
-        in — required by the forward funding-ratio roll in
-        ``StochasticFundingRatioAnalysis``.
-
-    Returns
-    -------
-    List[CashFlowStream] or List[LiabilityPath]
-        Length ``n_paths``. Element ``i`` is the liability state of path
-        ``i`` and is paired position-wise with stochastic asset streams in
-        ``StochasticALMAnalysis`` / ``RiskAttribution`` /
-        ``StochasticFundingRatioAnalysis``.
-    """
     if n_paths <= 0:
         raise ValueError(f"n_paths must be >= 1, got {n_paths}")
     seed_seq = np.random.SeedSequence(seed)

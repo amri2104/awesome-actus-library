@@ -7,11 +7,8 @@ from ..simulation import SimulationResult
 Array = np.ndarray
 
 class GBMModel:
-    """Geometric Brownian Motion (GBM) model for asset price simulation.
-    
-    Generates paths of stock prices or index values S_t using the exact
-    log-normal transition:
-        S(t + dt) = S(t) * exp((mu - 0.5 * sigma^2) * dt + sigma * sqrt(dt) * Z)
+    """
+    S(t + dt) = S(t) * exp((mu - 0.5 * sigma^2) * dt + sigma * sqrt(dt) * Z)
     where Z ~ N(0, 1).
     """
     
@@ -25,18 +22,6 @@ class GBMModel:
         sigma: float,
         seed: Optional[int] = None,
     ):
-        """
-        Parameters
-        ----------
-        S0 : float
-            Initial price/index level at t = 0.
-        mu : float
-            Expected drift rate (annualized).
-        sigma : float
-            Volatility of the asset returns (annualized).
-        seed : int, optional
-            Random seed for reproducibility.
-        """
         self.S0 = float(S0)
         self.mu = float(mu)
         self.sigma = float(sigma)
@@ -45,7 +30,6 @@ class GBMModel:
         self._sim: Optional[SimulationResult] = None
 
     def reset_rng(self) -> None:
-        """Resets the internal random number generator if a seed was set."""
         if self.seed is not None:
             self._rng = np.random.default_rng(self.seed)
 
@@ -57,25 +41,6 @@ class GBMModel:
         I: int,
         rng: Optional[np.random.Generator] = None,
     ) -> SimulationResult:
-        """Simulate asset price paths.
-        
-        Parameters
-        ----------
-        T : float
-            Horizon in years (e.g. 40.0).
-        M : int
-            Number of steps over the horizon T (T * steps_per_year).
-        I : int
-            Number of paths to simulate (n_paths).
-        rng : np.random.Generator, optional
-            External random number generator.
-            
-        Returns
-        -------
-        SimulationResult
-            A container holding 'times' (shape M+1) and 'rates' representing
-            prices (shape M+1, I).
-        """
         if rng is None:
             if self._rng is not None:
                 rng = self._rng

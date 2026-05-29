@@ -14,28 +14,6 @@ from ..mortality import MortalityTable
 
 
 class ClosedFundSimulator:
-    """Stage 1 simulator: closed fund, annual steps, no new entries.
-
-    Cohorts age year-by-year. Active cohorts accrue AGH from contributions
-    and applied interest. At retirement_age the per-capita AGH converts to an
-    annual pension via conversion_rate, then the cohort emits PENSION_PAYMENT
-    events each year until terminal_age.
-
-    Optional Stage 3 mortality: pass a ``MortalityTable`` to decrement each
-    retired cohort's headcount by the expected number of deaths each year.
-    Default ``mortality=None`` keeps Stage 1/2 behaviour unchanged.
-
-    Stage 5b stochastic mortality (idiosyncratic, Maffra/Armstrong/Pennanen
-    2021 Eq. 1): pass ``stochastic_mortality=True`` together with a ``rng``
-    to draw the surviving headcount as ``rng.binomial(int(headcount), 1-q_x)``
-    instead of the deterministic ``headcount * (1-q_x)``. Per-cohort RNG
-    streams are spawned lazily from the master rng so that mortality_filter
-    ("all" vs "retirees") changes which cohorts participate without
-    perturbing the random stream of those that do.
-
-    Run produces an AAL CashFlowStream consumable by ValueAnalysis,
-    IncomeAnalysis, LiquidityAnalysis.
-    """
 
     def __init__(
         self,
@@ -101,14 +79,7 @@ class ClosedFundSimulator:
         )
 
     def _get_cohort_rng(self, cohort_id: str) -> np.random.Generator:
-        """Lazy per-cohort RNG spawn from the master rng.
-
-        Spawning per cohort isolates each cohort's binomial stream, so
-        switching ``mortality_filter`` between 'retirees' and 'all' does
-        not perturb the retirees' draws — only the active draws are added
-        or omitted. This is the property needed for the variance-decomposition
-        identity in RiskAttribution.
-        """
+        
         existing = self._cohort_rngs.get(cohort_id)
         if existing is not None:
             return existing

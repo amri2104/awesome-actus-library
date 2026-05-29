@@ -20,8 +20,6 @@ class Cohort:
     gender: Gender = "unisex"
 
     def __post_init__(self) -> None:
-        # Context-free checks. Runs on construction only — not on deepcopy
-        # and not on the simulator's internal status flip.
         if self.headcount < 0:
             raise ValueError(
                 f"Cohort {self.cohort_id!r}: headcount must be >= 0, got {self.headcount}"

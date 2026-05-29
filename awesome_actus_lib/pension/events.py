@@ -1,8 +1,3 @@
-"""BVG liability event type constants.
-
-Sign convention: positive = inflow to fund, negative = outflow from fund.
-"""
-
 SAV_CONTRIB = "SAV_CONTRIB"
 RISK_CONTRIB = "RISK_CONTRIB"
 INTEREST_CREDIT = "INTEREST_CREDIT"
