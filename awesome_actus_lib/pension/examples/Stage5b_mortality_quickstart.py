@@ -152,7 +152,7 @@ print(f"  EntryPolicy: 20 entrants/year, age 25, salary CHF 80,000")
 print(f"  Stage4Dynamics: salary_growth={dynamics.salary_growth:.2%}, "
       f"CR path={dynamics.conversion_rate_path}, "
       f"threshold_index_period={dynamics.threshold_index_period}y")
-print(f"  Mortality:    EK 2001-2005 period table")
+print(f"  Mortality:    EK 2001-2005 generational (improvement 1.25%/yr from 2003)")
 print(f"  Horizon:      {HORIZON_YEARS} years")
 
 
@@ -241,7 +241,7 @@ print(f"  Asset 1: CHF 160,000,000 fixed PAM, 2.0% coupon, matures 2035")
 print(f"  Asset 2: CHF 100,000,000 fixed PAM, 2.5% coupon, matures 2045")
 print(f"  Asset 3: CHF 100,000,000 floating PAM, +60bp spread, matures 2035")
 print(f"  Asset 4: CHF  40,000,000 floating PAM, +80bp spread, matures 2050")
-print(f"  Total notional: CHF 400,000,000  (50% fixed / 50% floating)")
+print(f"  Total notional: CHF 400,000,000  (65% fixed / 35% floating)")
 
 
 # =============================================================================
