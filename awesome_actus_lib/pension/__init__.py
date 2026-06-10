@@ -5,6 +5,10 @@ from .analysis.conversion import (
     technical_uws,
 )
 from .analysis.funding_ratio import FundingRatioAnalysis
+from .analysis.going_concern import (
+    GoingConcernFundingRatioAnalysis,
+    RebalancingPolicy,
+)
 from .analysis.risk_attribution import RiskAttribution
 from .analysis.stochastic_alm import StochasticALMAnalysis
 from .analysis.stochastic_funding_ratio import StochasticFundingRatioAnalysis
@@ -40,6 +44,8 @@ __all__ = [
     "ek2001_2005",
     "StochasticALMAnalysis",
     "StochasticFundingRatioAnalysis",
+    "GoingConcernFundingRatioAnalysis",
+    "RebalancingPolicy",
     "RiskAttribution",
     "simulate_liability_paths",
     "LiabilityPath",

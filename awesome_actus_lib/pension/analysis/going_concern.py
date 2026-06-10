@@ -28,8 +28,17 @@ Baustein-1 scope only: ``SanierungsPolicy`` is Baustein 3; ``sanierung``
 must be ``None`` for now and raises ``NotImplementedError`` otherwise.
 
 Documented simplifications (spec Limitations):
-  * EQUITY accrues a constant book-value drift ``equity_return``
-    (mark-to-model) instead of the 5c GBM mark-to-market.
+  * EQUITY accrues the book-value drift ``equity_return`` (mark-to-model)
+    instead of the 5c GBM mark-to-market. With ``equity_sigma > 0`` the
+    annual gross return becomes lognormal per path and anniversary year,
+    (1+r) * exp(sigma*Z - sigma^2/2) with Z ~ N(0,1), so its expectation
+    stays (1+r) — sigma is a mean-preserving spread around the drift.
+    Shocks are seeded via ``np.random.SeedSequence(seed).spawn(n_paths)``
+    (one generator per path, same pattern as the 5b liability simulator);
+    shock k on path i is the k-th draw of generator i, so values are
+    independent of the order in which valuation dates are requested.
+    Final partial windows (non-anniversary ``as_of``) accrue at the
+    deterministic drift only.
   * The cash book is folded into the BONDS bucket: the ACTUS event stream
     does not separate fixed-bond from cash-account "IP" income without a
     contractId->bucket mapping, and the spec's scenarios use two buckets.
@@ -40,6 +49,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 from ..fund import PensionFund
@@ -129,8 +139,9 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
     roll per path (order per year, spec section "Per-Pfad-Roll"):
 
       1. accrue per bucket — BONDS gets the period's ACTUS "IP" coupons
-         (per-path events, same filter as 5c), EQUITY grows at the constant
-         book-value drift ``equity_return``;
+         (per-path events, same filter as 5c), EQUITY grows at the
+         book-value drift ``equity_return`` (with ``equity_sigma > 0``:
+         seeded lognormal annual returns per path, see module docstring);
       2. net liability cashflows of the paired ``LiabilityPath`` (excl.
          ``RISK_CONTRIB`` — Mai-Fix nicht regressieren) are added/withdrawn
          proportionally to the current weights;
@@ -157,6 +168,8 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         rebalancing: Optional[RebalancingPolicy] = None,
         sanierung=None,
         equity_return: float = 0.03,
+        equity_sigma: float = 0.0,
+        equity_seed: Optional[int] = None,
         initial_weights: Optional[Dict[str, float]] = None,
     ):
         if sanierung is not None:
@@ -168,6 +181,14 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
             raise ValueError(
                 "rebalancing requires forward mode (liab_paths is not None); "
                 "the legacy V_i(d)/PC_t0 mode has no per-path roll to rebalance."
+            )
+        if equity_sigma < 0.0:
+            raise ValueError(f"equity_sigma must be >= 0, got {equity_sigma}")
+        if equity_sigma > 0.0 and rebalancing is None:
+            raise ValueError(
+                "equity_sigma > 0 requires an active RebalancingPolicy; "
+                "with rebalancing=None the 5c delegation ignores it, which "
+                "would silently drop the requested equity volatility."
             )
         if initial_weights is not None:
             _validate_weights(initial_weights, "initial_weights")
@@ -183,7 +204,27 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         self.rebalancing = rebalancing
         self.sanierung = sanierung
         self.equity_return = float(equity_return)
+        self.equity_sigma = float(equity_sigma)
+        self.equity_seed = equity_seed
         self.initial_weights = initial_weights
+
+        # Per-path flow arrays parsed once (the roll re-reads them per
+        # window; parsing the event DataFrames every time is O(minutes)
+        # at quickstart scale).
+        self._flow_cache: Dict[int, Tuple[np.ndarray, ...]] = {}
+
+        # Lognormal equity shocks: one generator per path via
+        # SeedSequence.spawn (5b/5c pattern); shock k = k-th draw of the
+        # path's generator, cached so valuation-date order cannot matter.
+        if self.equity_sigma > 0.0:
+            seed = equity_seed if equity_seed is not None else getattr(salm, "seed", None)
+            seed_seq = np.random.SeedSequence(seed)
+            self._eq_rngs = [
+                np.random.default_rng(s) for s in seed_seq.spawn(int(salm.n_paths))
+            ]
+        else:
+            self._eq_rngs = None
+        self._eq_shock_cache: Dict[int, List[float]] = {}
 
     # ------------------------------------------------------------------ #
     # asset-side valuation                                               #
@@ -218,31 +259,83 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
                     EQUITY: self.equity_sleeve_0}
         return {b: self.initial_weights[b] * total0 for b in _BUCKETS}
 
+    def _path_flows(
+        self, path_i: int
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Pre-filtered (times, payoffs) arrays per path, parsed once.
+
+        Asset side keeps only "IP" events, liability side drops
+        RISK_CONTRIB — exactly the 5c filters, just cached as numpy arrays
+        so the per-window sums of the roll stay cheap.
+        """
+        cached = self._flow_cache.get(path_i)
+        if cached is not None:
+            return cached
+
+        asset_df = self.salm._asset_cfs[path_i].events_df
+        if asset_df is None or asset_df.empty:
+            a_times = np.empty(0, dtype="datetime64[ns]")
+            a_pay = np.empty(0, dtype=float)
+        else:
+            ip = asset_df[asset_df["type"] == "IP"]
+            a_times = pd.to_datetime(ip["time"]).to_numpy(dtype="datetime64[ns]")
+            a_pay = ip["payoff"].to_numpy(dtype=float)
+
+        liab_df = self.liab_paths[path_i].cashflows.events_df
+        if liab_df is None or liab_df.empty:
+            l_times = np.empty(0, dtype="datetime64[ns]")
+            l_pay = np.empty(0, dtype=float)
+        else:
+            nl = liab_df[liab_df["type"] != "RISK_CONTRIB"]
+            l_times = pd.to_datetime(nl["time"]).to_numpy(dtype="datetime64[ns]")
+            l_pay = nl["payoff"].to_numpy(dtype=float)
+
+        cached = (a_times, a_pay, l_times, l_pay)
+        self._flow_cache[path_i] = cached
+        return cached
+
     def _window_bond_income(
         self, path_i: int, start_ts: pd.Timestamp, end_ts: pd.Timestamp
     ) -> float:
         """ACTUS "IP" coupons in (start_ts, end_ts] — same filter as 5c."""
-        asset_df = self.salm._asset_cfs[path_i].events_df
-        if asset_df is None or asset_df.empty:
+        a_times, a_pay, _, _ = self._path_flows(path_i)
+        if a_times.size == 0:
             return 0.0
-        atimes = pd.to_datetime(asset_df["time"])
-        mask = (asset_df["type"] == "IP") & (atimes > start_ts) & (atimes <= end_ts)
-        return float(asset_df.loc[mask, "payoff"].sum())
+        mask = (a_times > start_ts.to_datetime64()) & (a_times <= end_ts.to_datetime64())
+        return float(a_pay[mask].sum())
 
     def _window_net_liab(
         self, path_i: int, start_ts: pd.Timestamp, end_ts: pd.Timestamp
     ) -> float:
         """Net liability flows in (start_ts, end_ts], excl. RISK_CONTRIB."""
-        liab_df = self.liab_paths[path_i].cashflows.events_df
-        if liab_df is None or liab_df.empty:
+        _, _, l_times, l_pay = self._path_flows(path_i)
+        if l_times.size == 0:
             return 0.0
-        ltimes = pd.to_datetime(liab_df["time"])
-        mask = (
-            (ltimes > start_ts)
-            & (ltimes <= end_ts)
-            & (liab_df["type"] != "RISK_CONTRIB")
+        mask = (l_times > start_ts.to_datetime64()) & (l_times <= end_ts.to_datetime64())
+        return float(l_pay[mask].sum())
+
+    def _equity_growth(self, path_i: int, k_cur: Optional[int], year_frac: float) -> float:
+        """Gross equity return for one roll window.
+
+        equity_sigma == 0: deterministic drift (1+r)^year_frac — bitwise
+        the Baustein-1 behaviour. equity_sigma > 0: lognormal annual gross
+        return (1+r)*exp(sigma*Z - sigma^2/2) on anniversary windows
+        (E[gross] = 1+r); final partial windows stay at the drift.
+        """
+        if self._eq_rngs is None or k_cur is None:
+            return (1.0 + self.equity_return) ** year_frac
+        z = self._equity_shock(path_i, k_cur)
+        return (1.0 + self.equity_return) * float(
+            np.exp(self.equity_sigma * z - 0.5 * self.equity_sigma ** 2)
         )
-        return float(liab_df.loc[mask, "payoff"].sum())
+
+    def _equity_shock(self, path_i: int, k: int) -> float:
+        """Standard-normal shock for anniversary k on path_i (1-based)."""
+        shocks = self._eq_shock_cache.setdefault(path_i, [])
+        rng = self._eq_rngs[path_i]
+        while len(shocks) < k:
+            shocks.append(float(rng.standard_normal()))
+        return shocks[k - 1]
 
     def _roll_rebalanced(
         self, as_of: str, path_i: int, collect_log: bool
@@ -276,7 +369,7 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
             year_frac = 1.0 if k_cur is not None else (
                 (t_cur - t_prev).days / 365.25
             )
-            buckets[EQUITY] *= (1.0 + self.equity_return) ** year_frac
+            buckets[EQUITY] *= self._equity_growth(path_i, k_cur, year_frac)
             buckets[BONDS] += self._window_bond_income(path_i, t_prev, t_cur)
 
             # 2. net liability flows, proportional to current weights
@@ -483,6 +576,46 @@ def _regression_check_against_5c() -> None:
     assert all(abs(reb_c.loc[k, "w_BONDS"] - 0.60) < 1e-12 for k in (5, 6, 7, 8, 9))
     print("  [OK] Assert 5 — Gewichtspfad shifts 40/60 -> 60/40 ab Jahr 5")
 
+    # ---- equity_sigma: 0.0 is a byte-identical no-op ----------------------
+    gc_sig0 = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b, equity_sigma=0.0,
+    )
+    for d in dates:
+        np.testing.assert_array_equal(
+            gc_sig0.funding_ratio_distribution(d),
+            gc_b.funding_ratio_distribution(d),
+            err_msg=f"equity_sigma=0.0 must be byte-identical to the drift at {d}",
+        )
+    print("  [OK] equity_sigma=0.0 — byte-identical to the deterministic drift")
+
+    # ---- equity_sigma > 0: per-path lognormal, SeedSequence-reproducible --
+    gc_s1 = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b, equity_sigma=0.10, equity_seed=123,
+    )
+    gc_s2 = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b, equity_sigma=0.10, equity_seed=123,
+    )
+    gc_s3 = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b, equity_sigma=0.10, equity_seed=124,
+    )
+    dist_s1 = gc_s1.funding_ratio_distribution(d_late)
+    np.testing.assert_array_equal(
+        dist_s1, gc_s2.funding_ratio_distribution(d_late),
+        err_msg="same equity_seed must reproduce identical distributions",
+    )
+    assert not np.array_equal(dist_s1, gc_s3.funding_ratio_distribution(d_late)), (
+        "different equity_seed must change the sigma>0 distribution"
+    )
+    assert not np.array_equal(dist_s1, gc_b.funding_ratio_distribution(d_late)), (
+        "equity_sigma=0.10 must differ from the deterministic drift"
+    )
+    # Path-wise distinct shocks (one spawned generator per path):
+    assert np.unique(dist_s1).size > 1, (
+        "sigma>0 distribution is degenerate — shocks not per path?"
+    )
+    print("  [OK] equity_sigma=0.10 — lognormal per path, "
+          "SeedSequence-reproduzierbar, seed-sensitiv")
+
     # ---- guards -----------------------------------------------------------
     try:
         GoingConcernFundingRatioAnalysis(salm_stub, **kwargs, sanierung=object())
@@ -490,6 +623,13 @@ def _regression_check_against_5c() -> None:
         print("  [OK] sanierung != None raises NotImplementedError (Baustein 3)")
     else:
         raise AssertionError("sanierung != None must raise NotImplementedError")
+
+    try:
+        GoingConcernFundingRatioAnalysis(salm_stub, **kwargs, equity_sigma=0.10)
+    except ValueError:
+        print("  [OK] equity_sigma > 0 ohne RebalancingPolicy raises ValueError")
+    else:
+        raise AssertionError("equity_sigma>0 without rebalancing must raise")
 
     try:
         RebalancingPolicy(target_weights={BONDS: 0.50, EQUITY: 0.60})
