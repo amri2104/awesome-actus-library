@@ -30,7 +30,7 @@ print("PENSION ALM CASE STUDY — Stage 1 — closed-fund baseline")
 print("=" * 78)
 
 # =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side) — Stage 1: closed fund
+# 1A. PORTFOLIO DEFINITION (liability side)
 # =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (closed fund)")
 print("-" * 40)
@@ -45,7 +45,7 @@ liability_fund.add_cohort(Cohort(
     cohort_id="ACTIVE_1990",
     birth_year=1990,
     headcount=200,
-    gross_salary=90_000.0,
+    gross_salary=90_000,
     accrued_savings=80_000.0,
 ))
 liability_fund.add_cohort(Cohort(
