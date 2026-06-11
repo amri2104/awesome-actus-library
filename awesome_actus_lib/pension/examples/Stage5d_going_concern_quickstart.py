@@ -3,10 +3,17 @@
 Stage 5d (Baustein 2) — Allokations-Shift-Experiment auf dem going-concern
 Asset-Roll (Spec: docs/stage5d_going_concern_spec.md):
 
-  A  Legacy 5c: kein Reinvestment, Buy-and-hold (Referenz / Regression)
+  A' echtes Buy-and-Hold in der GC-Engine: gleiche Buckets/Schocks wie B/C,
+     aber nie rebalancen (frequency_years > Horizont — reine Konfiguration)
   B  Reinvest + Fixed-Mix 40% BONDS / 60% EQUITY, jaehrlich, equity_sigma=0.10,
      bond_yield=0.02 auf dem inkrementellen BONDS-Bestand (Baustein 2c)
   C  wie B, Shift auf 60/40 ab Jahr 5 ("mortgage->bonds"-Beispiel)
+
+Der Legacy-5c-Lauf (One-Shot-Buchung, Flows zu 0%, GBM-MTM-Equity) bleibt
+als Regressions-Referenz fuer Spec-Assert 1, ist aber KEIN Szenario im
+Strategievergleich mehr: seine Equity-Schocks kommen aus einem anderen
+Generator (GBM monatlich) und seine Flows verdienen nichts — Differenzen
+zu B/C waeren Engine-Artefakte, keine Strategieeffekte.
 
 Kalibrierung per Spec: Stage-4-Bestand (8 aktive Kohorten + RETIRED_1955,
 EntryPolicy 20/Jahr), initial_assets = 1.076 x VK_t0 (Complementa YE 2023),
@@ -251,7 +258,7 @@ print(f"  Done. asset_cfs[0] events={len(salm._asset_cfs[0].events_df)}")
 
 
 # =============================================================================
-# 5. SZENARIEN A / B / C
+# 5. SZENARIEN A' / B / C  (+ Legacy 5c als Regressions-Referenz)
 # =============================================================================
 print("\n[5] Szenarien")
 print("-" * 40)
@@ -265,7 +272,24 @@ _COMMON = dict(
     liab_paths=liab_paths,
 )
 
-scen_A = StochasticFundingRatioAnalysis(salm=salm, **_COMMON)
+# Legacy 5c — nur Regressions-Referenz (Spec-Assert 1), kein Szenario.
+ref_5c = StochasticFundingRatioAnalysis(salm=salm, **_COMMON)
+
+# A' — echtes Buy-and-Hold in der GC-Engine: frequency_years > Horizont,
+# also wird nie ein Rebalancing-Termin faellig (die target_weights sind
+# inert). Flows werden proportional zu den aktuellen Gewichten investiert,
+# Equity-Schocks und bond_yield identisch zu B/C — pfadweise gekoppelt.
+scen_Ap = GoingConcernFundingRatioAnalysis(
+    salm, **_COMMON,
+    rebalancing=RebalancingPolicy(
+        target_weights={BONDS: 0.40, EQUITY: 0.60},
+        frequency_years=HORIZON_YEARS + 1,
+    ),
+    equity_return=EQ_RETURN,
+    equity_sigma=EQ_SIGMA,
+    equity_seed=SEED_EQ,
+    bond_yield=BOND_YIELD,
+)
 
 scen_B = GoingConcernFundingRatioAnalysis(
     salm, **_COMMON,
@@ -290,12 +314,13 @@ scen_C = GoingConcernFundingRatioAnalysis(
 )
 
 scenarios = {
-    "A (Legacy 5c, buy-and-hold)": scen_A,
+    "A' (Buy-and-Hold, GC-Engine)": scen_Ap,
     "B (Fix-Mix 40/60)": scen_B,
     "C (Shift 60/40 ab Jahr 5)": scen_C,
 }
 for name in scenarios:
     print(f"  {name}")
+print("  (Legacy 5c: nur Regressions-Referenz, nicht im Vergleich)")
 
 
 # =============================================================================
@@ -311,20 +336,27 @@ gc_off = GoingConcernFundingRatioAnalysis(
 for d in (BASE_DATE, f"{START_YEAR + 10}-01-01", f"{START_YEAR + 25}-01-01"):
     np.testing.assert_array_equal(
         gc_off.funding_ratio_distribution(d),
-        scen_A.funding_ratio_distribution(d),
+        ref_5c.funding_ratio_distribution(d),
         err_msg=f"Regression vs 5c verletzt bei {d}",
     )
 print("  => Assert 1 OK — rebalancing=None, sanierung=None identisch zu 5c.")
 
 # ---- DG_t0-Kalibrierung ------------------------------------------------------
-dg_t0 = scen_A.funding_ratio_distribution(BASE_DATE)
+dg_t0 = ref_5c.funding_ratio_distribution(BASE_DATE)
 assert abs(float(np.mean(dg_t0)) - 1.076) < 1e-9, (
     f"DG_t0-Kalibrierung verfehlt: {float(np.mean(dg_t0)):.6%} statt 107.6%"
 )
 print(f"  => Kalibrierung OK — DG_t0 = {float(np.mean(dg_t0)):.4%} (Soll 107.6%).")
 
-# ---- Spec-Assert 3: nach jedem Rebalance |w - target| < 1e-12 ----------------
+# ---- A'-Konfiguration: Buy-and-Hold heisst nie rebalancen --------------------
 _LAST_DATE = f"{START_YEAR + HORIZON_YEARS}-01-01"
+wp_ap = scen_Ap.weight_path(0, _LAST_DATE)
+assert not bool(wp_ap["rebalanced"].any()), (
+    "A' (frequency_years > Horizont) darf nie rebalancen"
+)
+print("  => A'-Konfiguration OK — kein einziger Rebalancing-Termin im Horizont.")
+
+# ---- Spec-Assert 3: nach jedem Rebalance |w - target| < 1e-12 ----------------
 for p_i in (0, N_PATHS // 2, N_PATHS - 1):
     wp = scen_B.weight_path(p_i, _LAST_DATE)
     reb = wp[wp["rebalanced"]]
@@ -361,14 +393,14 @@ dists = {
 
 _QUANTILES = (5, 25, 50, 75, 95)
 _COLORS = {
-    "A (Legacy 5c, buy-and-hold)": "#264653",
+    "A' (Buy-and-Hold, GC-Engine)": "#264653",
     "B (Fix-Mix 40/60)": "#2a9d8f",
     "C (Shift 60/40 ab Jahr 5)": "#e76f51",
 }
 _x = [np.datetime64(d) for d in fan_dates]
 
 # ---- v1: DG-Quantilfaecher je Szenario ---------------------------------------
-for tag, (name, scen_dists) in zip("ABC", dists.items()):
+for tag, (name, scen_dists) in zip(("Aprime", "B", "C"), dists.items()):
     q = {p: np.array([np.percentile(scen_dists[d], p) for d in fan_dates])
          for p in _QUANTILES}
     fig, ax = plt.subplots(figsize=(11, 5))
