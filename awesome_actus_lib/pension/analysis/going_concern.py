@@ -42,6 +42,14 @@ Documented simplifications (spec Limitations):
   * The cash book is folded into the BONDS bucket: the ACTUS event stream
     does not separate fixed-bond from cash-account "IP" income without a
     contractId->bucket mapping, and the spec's scenarios use two buckets.
+  * BONDS income: the ORIGINAL book value earns exactly the ACTUS "IP"
+    coupons of the original contracts (run-off semantics, like 5c).
+    Rebalanced/reinvested money on top of that earns nothing by default —
+    no new ACTUS contracts are generated. ``bond_yield`` (Baustein 2c)
+    fixes this: the incremental BONDS balance ABOVE the initial book value
+    accrues a flat book yield per year (simple within the window, positive
+    part only). ``bond_yield=None`` is byte-identical to the
+    no-yield behaviour (same regression pattern as ``equity_sigma=0``).
 """
 
 from __future__ import annotations
@@ -139,9 +147,11 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
     roll per path (order per year, spec section "Per-Pfad-Roll"):
 
       1. accrue per bucket — BONDS gets the period's ACTUS "IP" coupons
-         (per-path events, same filter as 5c), EQUITY grows at the
-         book-value drift ``equity_return`` (with ``equity_sigma > 0``:
-         seeded lognormal annual returns per path, see module docstring);
+         (per-path events, same filter as 5c) plus, with ``bond_yield``,
+         a flat book yield on the incremental balance above the initial
+         book value; EQUITY grows at the book-value drift
+         ``equity_return`` (with ``equity_sigma > 0``: seeded lognormal
+         annual returns per path, see module docstring);
       2. net liability cashflows of the paired ``LiabilityPath`` (excl.
          ``RISK_CONTRIB`` — Mai-Fix nicht regressieren) are added/withdrawn
          proportionally to the current weights;
@@ -170,6 +180,7 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         equity_return: float = 0.03,
         equity_sigma: float = 0.0,
         equity_seed: Optional[int] = None,
+        bond_yield: Optional[float] = None,
         initial_weights: Optional[Dict[str, float]] = None,
     ):
         if sanierung is not None:
@@ -190,6 +201,12 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
                 "with rebalancing=None the 5c delegation ignores it, which "
                 "would silently drop the requested equity volatility."
             )
+        if bond_yield is not None and rebalancing is None:
+            raise ValueError(
+                "bond_yield requires an active RebalancingPolicy; with "
+                "rebalancing=None there is no incremental BONDS balance "
+                "to accrue it on."
+            )
         if initial_weights is not None:
             _validate_weights(initial_weights, "initial_weights")
         super().__init__(
@@ -206,6 +223,7 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         self.equity_return = float(equity_return)
         self.equity_sigma = float(equity_sigma)
         self.equity_seed = equity_seed
+        self.bond_yield = None if bond_yield is None else float(bond_yield)
         self.initial_weights = initial_weights
 
         # Per-path flow arrays parsed once (the roll re-reads them per
@@ -361,6 +379,7 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
             grid.append((as_of_ts, None))
 
         buckets = self._bucket_init()
+        bonds_book_0 = buckets[BONDS]
         log: List[dict] = []
         t_prev = base_ts
 
@@ -370,6 +389,14 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
                 (t_cur - t_prev).days / 365.25
             )
             buckets[EQUITY] *= self._equity_growth(path_i, k_cur, year_frac)
+            if self.bond_yield is not None:
+                # Baustein 2c: flat book yield on the incremental BONDS
+                # balance above the initial book value, on the position
+                # held over the window (start-of-window balance). The
+                # original book value keeps earning the ACTUS coupons only.
+                incremental = buckets[BONDS] - bonds_book_0
+                if incremental > 0.0:
+                    buckets[BONDS] += self.bond_yield * incremental * year_frac
             buckets[BONDS] += self._window_bond_income(path_i, t_prev, t_cur)
 
             # 2. net liability flows, proportional to current weights
@@ -616,6 +643,50 @@ def _regression_check_against_5c() -> None:
     print("  [OK] equity_sigma=0.10 — lognormal per path, "
           "SeedSequence-reproduzierbar, seed-sensitiv")
 
+    # ---- bond_yield: None/0.0 no-op; Positivteil-Klemme; >0 wirkt monoton --
+    # With pol_b the 40% BONDS target sits far below the 80% start book
+    # (240M of 300M), so the bucket never exceeds the initial book value
+    # and the positive-part clamp must make bond_yield a no-op:
+    gc_clamp = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b, bond_yield=0.02,
+    )
+    np.testing.assert_array_equal(
+        gc_clamp.funding_ratio_distribution(d_late),
+        gc_b.funding_ratio_distribution(d_late),
+        err_msg="bucket below initial book: positive-part clamp must "
+                "make bond_yield a no-op",
+    )
+    # With an 80/20 target the bucket stays at/above the start book and
+    # grows past it via reinvested net inflows — the yield must bite:
+    pol_hi = RebalancingPolicy(target_weights={BONDS: 0.80, EQUITY: 0.20})
+    gc_hiN = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_hi,
+    )
+    gc_hi0 = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_hi, bond_yield=0.0,
+    )
+    for d in dates:
+        np.testing.assert_array_equal(
+            gc_hi0.funding_ratio_distribution(d),
+            gc_hiN.funding_ratio_distribution(d),
+            err_msg=f"bond_yield=0.0 must match bond_yield=None at {d}",
+        )
+    gc_hi = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_hi, bond_yield=0.02,
+    )
+    dist_hi = gc_hi.funding_ratio_distribution(d_late)
+    dist_h0 = gc_hiN.funding_ratio_distribution(d_late)
+    assert not np.array_equal(dist_hi, dist_h0), (
+        "bond_yield=0.02 must change the DG distribution once the bucket "
+        "exceeds the initial book value"
+    )
+    assert np.all(dist_hi >= dist_h0 - 1e-15), (
+        "bond_yield > 0 with positive-part incremental balance can only "
+        "add assets — DG must be pointwise >= the no-yield case"
+    )
+    print("  [OK] bond_yield — None/0.0 identisch, Positivteil-Klemme greift, "
+          f"0.02 wirkt pointwise >= (max dDG = {float(np.max(dist_hi - dist_h0)):.4%})")
+
     # ---- guards -----------------------------------------------------------
     try:
         GoingConcernFundingRatioAnalysis(salm_stub, **kwargs, sanierung=object())
@@ -630,6 +701,13 @@ def _regression_check_against_5c() -> None:
         print("  [OK] equity_sigma > 0 ohne RebalancingPolicy raises ValueError")
     else:
         raise AssertionError("equity_sigma>0 without rebalancing must raise")
+
+    try:
+        GoingConcernFundingRatioAnalysis(salm_stub, **kwargs, bond_yield=0.02)
+    except ValueError:
+        print("  [OK] bond_yield ohne RebalancingPolicy raises ValueError")
+    else:
+        raise AssertionError("bond_yield without rebalancing must raise")
 
     try:
         RebalancingPolicy(target_weights={BONDS: 0.50, EQUITY: 0.60})

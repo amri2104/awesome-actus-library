@@ -4,7 +4,8 @@ Stage 5d (Baustein 2) — Allokations-Shift-Experiment auf dem going-concern
 Asset-Roll (Spec: docs/stage5d_going_concern_spec.md):
 
   A  Legacy 5c: kein Reinvestment, Buy-and-hold (Referenz / Regression)
-  B  Reinvest + Fixed-Mix 40% BONDS / 60% EQUITY, jaehrlich, equity_sigma=0.10
+  B  Reinvest + Fixed-Mix 40% BONDS / 60% EQUITY, jaehrlich, equity_sigma=0.10,
+     bond_yield=0.02 auf dem inkrementellen BONDS-Bestand (Baustein 2c)
   C  wie B, Shift auf 60/40 ab Jahr 5 ("mortgage->bonds"-Beispiel)
 
 Kalibrierung per Spec: Stage-4-Bestand (8 aktive Kohorten + RETIRED_1955,
@@ -53,6 +54,10 @@ SEED_EQ = 777
 # Reinvestment + Rebalancing isoliert und nicht Return-Annahmen.
 EQ_RETURN = 0.03
 EQ_SIGMA = 0.10
+# Buch-Yield auf dem inkrementellen BONDS-Bestand ueber dem Anfangsbuchwert
+# (Baustein 2c). Anker: Complementa-Ertragsrendite ~2.1%. Der urspruengliche
+# Buchwert verdient weiterhin nur die ACTUS-Coupons der Originalkontrakte.
+BOND_YIELD = 0.02
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 OUT_DIR = os.path.join(_REPO_ROOT, "output", "stage_5d")
@@ -268,6 +273,7 @@ scen_B = GoingConcernFundingRatioAnalysis(
     equity_return=EQ_RETURN,
     equity_sigma=EQ_SIGMA,
     equity_seed=SEED_EQ,
+    bond_yield=BOND_YIELD,
 )
 
 scen_C = GoingConcernFundingRatioAnalysis(
@@ -280,6 +286,7 @@ scen_C = GoingConcernFundingRatioAnalysis(
     equity_return=EQ_RETURN,
     equity_sigma=EQ_SIGMA,
     equity_seed=SEED_EQ,
+    bond_yield=BOND_YIELD,
 )
 
 scenarios = {
