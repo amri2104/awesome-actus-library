@@ -24,8 +24,16 @@ offline regression check (no ACTUS service calls) with:
 
     python3 -m awesome_actus_lib.pension.analysis.going_concern
 
-Baustein-1 scope only: ``SanierungsPolicy`` is Baustein 3; ``sanierung``
-must be ``None`` for now and raises ``NotImplementedError`` otherwise.
+Baustein 3 (``SanierungsPolicy``): DG-conditional Sanierungsbeitraege per
+Art. 65d BVG as a PURE ASSET INFLOW — SB_t = sb_factor * SAV_CONTRIB_t,
+active in year t iff DG_{t-1} < trigger_dg (hysteresis via exit_dg,
+optional max_years cap per path). SB events are logged in a SEPARATE
+gc-event log per path (``gc_events``, type ``SANIERUNG_SB``) and are NOT
+written into the liability stream — provenance stays clean, and because
+no liability events are created or changed, the measure is compatible
+with the generate-then-pair architecture (spec Architektur-Regel).
+SB ∝ SAV_CONTRIB is the documented payroll proxy (Lohnsumme is not in
+the event stream); ``sb_factor`` is a free parameter.
 
 Documented simplifications (spec Limitations):
   * EQUITY accrues the book-value drift ``equity_return`` (mark-to-model)
@@ -60,6 +68,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from ..events import SAV_CONTRIB
 from ..fund import PensionFund
 from ..mortality import MortalityTable
 from ..simulators.liability_paths import LiabilityPath
@@ -135,6 +144,37 @@ class RebalancingPolicy:
         return self.target_weights
 
 
+@dataclass(frozen=True)
+class SanierungsPolicy:
+    """DG-conditional Sanierungsbeitrag (Art. 65d BVG) — pure asset inflow.
+
+    Active in year t iff DG_{t-1} < ``trigger_dg``; once active it stays
+    active until DG_{t-1} >= ``exit_dg`` (hysteresis, ``exit_dg >=
+    trigger_dg``; equal values = memoryless trigger). When active,
+    ``SB_t = sb_factor * SAV_CONTRIB_t`` (the path's savings contributions
+    of the year — documented payroll proxy) is booked as an asset inflow
+    and logged as ``SANIERUNG_SB`` in the separate gc-event log. The
+    liability stream is never touched. ``max_years`` caps the number of
+    SB-paying years per path (cumulative, counted when SB > 0 flows).
+    """
+
+    trigger_dg: float = 1.00
+    exit_dg: float = 1.00
+    sb_factor: float = 0.5
+    max_years: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.exit_dg < self.trigger_dg:
+            raise ValueError(
+                f"exit_dg ({self.exit_dg}) must be >= trigger_dg "
+                f"({self.trigger_dg}) — hysteresis exit cannot lie below entry"
+            )
+        if self.sb_factor < 0.0:
+            raise ValueError(f"sb_factor must be >= 0, got {self.sb_factor}")
+        if self.max_years is not None and int(self.max_years) < 1:
+            raise ValueError(f"max_years must be >= 1, got {self.max_years}")
+
+
 class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
     """Stage-5c solvency funding ratio with opt-in going-concern asset roll.
 
@@ -155,7 +195,10 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
       2. net liability cashflows of the paired ``LiabilityPath`` (excl.
          ``RISK_CONTRIB`` — Mai-Fix nicht regressieren) are added/withdrawn
          proportionally to the current weights;
-      3. (Sanierung — Baustein 3, not implemented here);
+      3. Sanierung (Baustein 3): if DG_{t-1} < trigger (hysteresis via
+         exit_dg, max_years cap), ``SB_t = sb_factor * SAV_CONTRIB_t`` is
+         booked as a pure asset inflow and logged via ``gc_events`` —
+         never into the liability stream;
       4. rebalance onto the effective target weights every
          ``frequency_years`` anniversaries (book transfer, optional
          ``cost_bps``; from ``shift_at_year`` on, ``shift_weights`` apply);
@@ -183,10 +226,16 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         bond_yield: Optional[float] = None,
         initial_weights: Optional[Dict[str, float]] = None,
     ):
-        if sanierung is not None:
-            raise NotImplementedError(
-                "SanierungsPolicy ist Baustein 3 der Stage-5d-Spec und noch "
-                "nicht implementiert; sanierung muss None sein."
+        if sanierung is not None and not isinstance(sanierung, SanierungsPolicy):
+            raise TypeError(
+                f"sanierung must be a SanierungsPolicy or None, "
+                f"got {type(sanierung).__name__}"
+            )
+        if sanierung is not None and rebalancing is None:
+            raise ValueError(
+                "sanierung requires an active RebalancingPolicy; with "
+                "rebalancing=None the 5c delegation runs and would silently "
+                "ignore the SanierungsPolicy."
             )
         if rebalancing is not None and liab_paths is None:
             raise ValueError(
@@ -230,6 +279,9 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         # window; parsing the event DataFrames every time is O(minutes)
         # at quickstart scale).
         self._flow_cache: Dict[int, Tuple[np.ndarray, ...]] = {}
+        # PC_t,i is pure in (date, path) — cached because the Sanierungs-
+        # trigger needs DG_{t-1} in every roll window of every as_of call.
+        self._pc_cache: Dict[Tuple[int, str], float] = {}
 
         # Lognormal equity shocks: one generator per path via
         # SeedSequence.spawn (5b/5c pattern); shock k = k-th draw of the
@@ -269,6 +321,24 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         _, log = self._roll_rebalanced(as_of, path_i, collect_log=True)
         return pd.DataFrame(log)
 
+    def gc_events(self, path_i: int, as_of: str) -> pd.DataFrame:
+        """Separate gc-event log for one path up to ``as_of``.
+
+        Contains the Sanierungsbeitraege as ``SANIERUNG_SB`` rows (time,
+        type, payoff, dg_prev, path) — deliberately NOT part of the
+        liability stream, so liability provenance stays clean. Empty
+        DataFrame when no SanierungsPolicy is set or none fired.
+        """
+        if self.rebalancing is None:
+            raise ValueError("gc_events requires an active RebalancingPolicy")
+        _, log = self._roll_rebalanced(as_of, path_i, collect_log=True)
+        rows = [
+            {"time": r["date"], "type": "SANIERUNG_SB", "payoff": r["sb"],
+             "dg_prev": r["dg_prev"], "path": path_i}
+            for r in log if r["sb"] > 0.0
+        ]
+        return pd.DataFrame(rows, columns=["time", "type", "payoff", "dg_prev", "path"])
+
     def _bucket_init(self) -> Dict[str, float]:
         total0 = self.bond_book + self.cash_book + self.equity_sleeve_0
         if self.initial_weights is None:
@@ -303,12 +373,17 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         if liab_df is None or liab_df.empty:
             l_times = np.empty(0, dtype="datetime64[ns]")
             l_pay = np.empty(0, dtype=float)
+            s_times = np.empty(0, dtype="datetime64[ns]")
+            s_pay = np.empty(0, dtype=float)
         else:
             nl = liab_df[liab_df["type"] != "RISK_CONTRIB"]
             l_times = pd.to_datetime(nl["time"]).to_numpy(dtype="datetime64[ns]")
             l_pay = nl["payoff"].to_numpy(dtype=float)
+            sav = liab_df[liab_df["type"] == SAV_CONTRIB]
+            s_times = pd.to_datetime(sav["time"]).to_numpy(dtype="datetime64[ns]")
+            s_pay = sav["payoff"].to_numpy(dtype=float)
 
-        cached = (a_times, a_pay, l_times, l_pay)
+        cached = (a_times, a_pay, l_times, l_pay, s_times, s_pay)
         self._flow_cache[path_i] = cached
         return cached
 
@@ -316,7 +391,7 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         self, path_i: int, start_ts: pd.Timestamp, end_ts: pd.Timestamp
     ) -> float:
         """ACTUS "IP" coupons in (start_ts, end_ts] — same filter as 5c."""
-        a_times, a_pay, _, _ = self._path_flows(path_i)
+        a_times, a_pay, _, _, _, _ = self._path_flows(path_i)
         if a_times.size == 0:
             return 0.0
         mask = (a_times > start_ts.to_datetime64()) & (a_times <= end_ts.to_datetime64())
@@ -326,11 +401,29 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         self, path_i: int, start_ts: pd.Timestamp, end_ts: pd.Timestamp
     ) -> float:
         """Net liability flows in (start_ts, end_ts], excl. RISK_CONTRIB."""
-        _, _, l_times, l_pay = self._path_flows(path_i)
+        _, _, l_times, l_pay, _, _ = self._path_flows(path_i)
         if l_times.size == 0:
             return 0.0
         mask = (l_times > start_ts.to_datetime64()) & (l_times <= end_ts.to_datetime64())
         return float(l_pay[mask].sum())
+
+    def _window_sav_contrib(
+        self, path_i: int, start_ts: pd.Timestamp, end_ts: pd.Timestamp
+    ) -> float:
+        """SAV_CONTRIB flows in (start_ts, end_ts] — SB assessment base."""
+        _, _, _, _, s_times, s_pay = self._path_flows(path_i)
+        if s_times.size == 0:
+            return 0.0
+        mask = (s_times > start_ts.to_datetime64()) & (s_times <= end_ts.to_datetime64())
+        return float(s_pay[mask].sum())
+
+    def _path_PC_cached(self, as_of: str, path_i: int) -> float:
+        key = (path_i, as_of)
+        pc = self._pc_cache.get(key)
+        if pc is None:
+            pc = self._path_PC(as_of, path_i)
+            self._pc_cache[key] = pc
+        return pc
 
     def _equity_growth(self, path_i: int, k_cur: Optional[int], year_frac: float) -> float:
         """Gross equity return for one roll window.
@@ -383,7 +476,30 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
         log: List[dict] = []
         t_prev = base_ts
 
+        san = self.sanierung
+        san_active = False
+        sb_years_used = 0
+
         for t_cur, k_cur in grid:
+            # Sanierungs-trigger state BEFORE this year's accruals: DG_{t-1}
+            # from the post-everything state of the previous anniversary.
+            # Partial final windows never pay SB (no full contribution year).
+            dg_prev = float("nan")
+            pay_sb = False
+            if san is not None and k_cur is not None:
+                v_prev = buckets[BONDS] + buckets[EQUITY]
+                pc_prev = self._path_PC_cached(t_prev.strftime("%Y-%m-%d"), path_i)
+                dg_prev = v_prev / pc_prev if pc_prev > 0.0 else float("nan")
+                if san_active:
+                    # Hysteresis: stay active until DG_{t-1} >= exit_dg.
+                    # NaN (PC=0 edge) deactivates.
+                    san_active = dg_prev < san.exit_dg
+                else:
+                    san_active = dg_prev < san.trigger_dg
+                pay_sb = san_active and (
+                    san.max_years is None or sb_years_used < int(san.max_years)
+                )
+
             # 1. accrue per bucket
             year_frac = 1.0 if k_cur is not None else (
                 (t_cur - t_prev).days / 365.25
@@ -409,7 +525,22 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
                 # Insolvent on this path — weights ill-defined, park in BONDS.
                 buckets[BONDS] += net_liab
 
-            # 3. Sanierung — Baustein 3, intentionally absent here.
+            # 3. Sanierung (Baustein 3): SB_t = sb_factor * SAV_CONTRIB_t as
+            # pure asset inflow, distributed like the other flows. The
+            # liability stream is NOT touched; logging goes to the separate
+            # gc-event log (see gc_events).
+            sb_amount = 0.0
+            if pay_sb:
+                sav_t = self._window_sav_contrib(path_i, t_prev, t_cur)
+                sb_amount = san.sb_factor * sav_t
+                if sb_amount > 0.0:
+                    total = buckets[BONDS] + buckets[EQUITY]
+                    if total > 0.0:
+                        for b in _BUCKETS:
+                            buckets[b] += sb_amount * (buckets[b] / total)
+                    else:
+                        buckets[BONDS] += sb_amount
+                    sb_years_used += 1
 
             # 4. rebalance onto effective targets every frequency_years
             rebalanced = False
@@ -431,7 +562,7 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
             # 5. DG_t available in-loop (logged on demand)
             if collect_log:
                 total = buckets[BONDS] + buckets[EQUITY]
-                pc = self._path_PC(t_cur.strftime("%Y-%m-%d"), path_i)
+                pc = self._path_PC_cached(t_cur.strftime("%Y-%m-%d"), path_i)
                 log.append({
                     "date": t_cur,
                     "year_index": k_cur,
@@ -442,6 +573,9 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
                     "rebalanced": rebalanced,
                     "target_BONDS": targets[BONDS] if targets else float("nan"),
                     "target_EQUITY": targets[EQUITY] if targets else float("nan"),
+                    "sanierung_active": san_active if san is not None else False,
+                    "dg_prev": dg_prev,
+                    "sb": sb_amount,
                 })
             t_prev = t_cur
 
@@ -512,7 +646,7 @@ def _regression_check_against_5c() -> None:
         trace = []
         retired_hc = 50.0
         for y in range(start_year, start_year + horizon_years):
-            rows.append({"time": f"{y}-06-30T00:00:00", "type": "CONTRIBUTION",
+            rows.append({"time": f"{y}-06-30T00:00:00", "type": SAV_CONTRIB,
                          "payoff": 2_500_000.0})
             rows.append({"time": f"{y}-12-31T00:00:00", "type": "PENSION_PAYMENT",
                          "payoff": -30_000.0 * retired_hc})
@@ -687,13 +821,84 @@ def _regression_check_against_5c() -> None:
     print("  [OK] bond_yield — None/0.0 identisch, Positivteil-Klemme greift, "
           f"0.02 wirkt pointwise >= (max dDG = {float(np.max(dist_hi - dist_h0)):.4%})")
 
+    # ---- Baustein 3: SanierungsPolicy --------------------------------------
+    # Never fires (trigger 0): byte-identical to sanierung=None, no events.
+    gc_san_off = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b,
+        sanierung=SanierungsPolicy(trigger_dg=0.0, exit_dg=0.0),
+    )
+    for d in dates:
+        np.testing.assert_array_equal(
+            gc_san_off.funding_ratio_distribution(d),
+            gc_b.funding_ratio_distribution(d),
+            err_msg=f"never-firing SanierungsPolicy must equal sanierung=None at {d}",
+        )
+    assert gc_san_off.gc_events(0, d_late).empty, (
+        "never-firing SanierungsPolicy must produce no SANIERUNG_SB events"
+    )
+    print("  [OK] SanierungsPolicy (trigger=0) — nie aktiv, byte-identisch, "
+          "gc_events leer")
+
+    # Always fires (trigger 99): SB = sb_factor * SAV_CONTRIB_t, pointwise >=.
+    gc_san = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b,
+        sanierung=SanierungsPolicy(trigger_dg=99.0, exit_dg=99.0, sb_factor=0.5),
+    )
+    dist_san = gc_san.funding_ratio_distribution(d_late)
+    dist_ref = gc_b.funding_ratio_distribution(d_late)
+    assert not np.array_equal(dist_san, dist_ref), "SB must change the distribution"
+    assert np.all(dist_san >= dist_ref - 1e-15), (
+        "SB is a pure asset inflow — DG must be pointwise >= without it"
+    )
+    ev = gc_san.gc_events(1, d_late)
+    assert len(ev) == 9, f"expected 9 SB years (k=1..9), got {len(ev)}"
+    assert (ev["type"] == "SANIERUNG_SB").all()
+    np.testing.assert_allclose(
+        ev["payoff"].to_numpy(), 0.5 * 2_500_000.0,
+        err_msg="SB_t must equal sb_factor * SAV_CONTRIB_t",
+    )
+    assert (ev["dg_prev"] < 99.0).all(), "SB only in years with DG_{t-1} < trigger"
+    # Liability stream untouched (provenance):
+    liab_df_check = liab_paths[1].cashflows.events_df
+    assert "SANIERUNG_SB" not in set(liab_df_check["type"]), (
+        "SANIERUNG_SB must never appear in the liability stream"
+    )
+    print("  [OK] SanierungsPolicy (immer aktiv) — SB = 0.5 x SAV_CONTRIB, "
+          f"pointwise >= (max dDG = {float(np.max(dist_san - dist_ref)):.4%}), "
+          "Log separat")
+
+    # max_years caps the number of SB-paying years per path.
+    gc_san_cap = GoingConcernFundingRatioAnalysis(
+        salm_stub, **kwargs, rebalancing=pol_b,
+        sanierung=SanierungsPolicy(trigger_dg=99.0, exit_dg=99.0,
+                                   sb_factor=0.5, max_years=3),
+    )
+    assert len(gc_san_cap.gc_events(0, d_late)) == 3, "max_years=3 must cap SB years"
+    print("  [OK] SanierungsPolicy max_years=3 — genau 3 SB-Jahre")
+
     # ---- guards -----------------------------------------------------------
     try:
         GoingConcernFundingRatioAnalysis(salm_stub, **kwargs, sanierung=object())
-    except NotImplementedError:
-        print("  [OK] sanierung != None raises NotImplementedError (Baustein 3)")
+    except TypeError:
+        print("  [OK] sanierung mit falschem Typ raises TypeError")
     else:
-        raise AssertionError("sanierung != None must raise NotImplementedError")
+        raise AssertionError("non-SanierungsPolicy sanierung must raise TypeError")
+
+    try:
+        GoingConcernFundingRatioAnalysis(
+            salm_stub, **kwargs, sanierung=SanierungsPolicy(),
+        )
+    except ValueError:
+        print("  [OK] sanierung ohne RebalancingPolicy raises ValueError")
+    else:
+        raise AssertionError("sanierung without rebalancing must raise")
+
+    try:
+        SanierungsPolicy(trigger_dg=1.0, exit_dg=0.9)
+    except ValueError:
+        print("  [OK] exit_dg < trigger_dg raises ValueError")
+    else:
+        raise AssertionError("exit_dg < trigger_dg must raise")
 
     try:
         GoingConcernFundingRatioAnalysis(salm_stub, **kwargs, equity_sigma=0.10)

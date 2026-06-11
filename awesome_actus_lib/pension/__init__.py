@@ -8,6 +8,7 @@ from .analysis.funding_ratio import FundingRatioAnalysis
 from .analysis.going_concern import (
     GoingConcernFundingRatioAnalysis,
     RebalancingPolicy,
+    SanierungsPolicy,
 )
 from .analysis.risk_attribution import RiskAttribution
 from .analysis.stochastic_alm import StochasticALMAnalysis
@@ -46,6 +47,7 @@ __all__ = [
     "StochasticFundingRatioAnalysis",
     "GoingConcernFundingRatioAnalysis",
     "RebalancingPolicy",
+    "SanierungsPolicy",
     "RiskAttribution",
     "simulate_liability_paths",
     "LiabilityPath",

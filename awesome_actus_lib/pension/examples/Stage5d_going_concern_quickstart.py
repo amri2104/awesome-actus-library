@@ -8,6 +8,11 @@ Asset-Roll (Spec: docs/stage5d_going_concern_spec.md):
   B  Reinvest + Fixed-Mix 40% BONDS / 60% EQUITY, jaehrlich, equity_sigma=0.10,
      bond_yield=0.02 auf dem inkrementellen BONDS-Bestand (Baustein 2c)
   C  wie B, Shift auf 60/40 ab Jahr 5 ("mortgage->bonds"-Beispiel)
+  D  wie B + SanierungsPolicy(trigger=1.00, sb_factor=0.5) — Baustein 3:
+     SB_t = 0.5 x SAV_CONTRIB_t als reiner Asset-Inflow, wenn DG_{t-1} < 100%;
+     Log separat als SANIERUNG_SB (gc_events), nie im Liability-Stream.
+     Pfadweise gekoppelt mit B (gleicher SEED_EQ, gleiche Liability-Pfade):
+     D - B ist die reine Massnahmenwirkung.
 
 Der Legacy-5c-Lauf (One-Shot-Buchung, Flows zu 0%, GBM-MTM-Equity) bleibt
 als Regressions-Referenz fuer Spec-Assert 1, ist aber KEIN Szenario im
@@ -25,6 +30,7 @@ Szenario D (Sanierung) folgt mit Baustein 3.
 import os
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from awesome_actus_lib import PAM, Portfolio
@@ -38,6 +44,7 @@ from awesome_actus_lib.pension import (
     FundingRatioAnalysis,
     GoingConcernFundingRatioAnalysis,
     RebalancingPolicy,
+    SanierungsPolicy,
     StochasticALMAnalysis,
     StochasticFundingRatioAnalysis,
     ek2001_2005,
@@ -313,10 +320,24 @@ scen_C = GoingConcernFundingRatioAnalysis(
     bond_yield=BOND_YIELD,
 )
 
+# D — wie B, plus DG-konditionaler Sanierungsbeitrag (Baustein 3). Gleiche
+# RebalancingPolicy, gleicher SEED_EQ, gleiche liab_paths wie B: D - B ist
+# die reine Wirkung der Massnahme.
+scen_D = GoingConcernFundingRatioAnalysis(
+    salm, **_COMMON,
+    rebalancing=RebalancingPolicy(target_weights={BONDS: 0.40, EQUITY: 0.60}),
+    equity_return=EQ_RETURN,
+    equity_sigma=EQ_SIGMA,
+    equity_seed=SEED_EQ,
+    bond_yield=BOND_YIELD,
+    sanierung=SanierungsPolicy(trigger_dg=1.00, exit_dg=1.00, sb_factor=0.5),
+)
+
 scenarios = {
     "A' (Buy-and-Hold, GC-Engine)": scen_Ap,
     "B (Fix-Mix 40/60)": scen_B,
     "C (Shift 60/40 ab Jahr 5)": scen_C,
+    "D (B + Sanierung)": scen_D,
 }
 for name in scenarios:
     print(f"  {name}")
@@ -377,6 +398,39 @@ assert all(
 ), "Szenario C: ab Jahr 5 muss 60/40 gelten"
 print("  => Assert 5 OK — Gewichtspfad C: 40/60 -> 60/40 ab Jahr 5.")
 
+# ---- Spec-Assert 2: SB nur bei DG_{t-1} < trigger; >0 in D, == 0 sonst -------
+sb_events = [scen_D.gc_events(i, _LAST_DATE) for i in range(N_PATHS)]
+all_sb = pd.concat(sb_events, ignore_index=True)
+assert len(all_sb) > 0 and float(all_sb["payoff"].sum()) > 0.0, (
+    "Szenario D: Summe SB muss > 0 sein — Trigger feuert auf keinem Pfad "
+    "(DG_t0-Kalibrierung pruefen)"
+)
+assert (all_sb["dg_prev"] < 1.00).all(), (
+    "SB-Buchungen nur in Pfadjahren mit DG_{t-1} < trigger erlaubt"
+)
+for _name, _scen in (("A'", scen_Ap), ("B", scen_B), ("C", scen_C)):
+    _tot = sum(
+        float(_scen.gc_events(i, _LAST_DATE)["payoff"].sum())
+        for i in range(N_PATHS)
+    )
+    assert _tot == 0.0, f"Szenario {_name}: Summe SB muss == 0 sein, ist {_tot}"
+print(f"  => Assert 2 OK — SB nur bei DG_t-1 < 100% "
+      f"({len(all_sb)} SB-Pfadjahre in D, Summe CHF {float(all_sb['payoff'].sum())/1e6:,.1f}m); "
+      f"A'/B/C: 0.")
+
+# ---- Spec-Assert 4: Sanity — mean(DG_T) D >= B -------------------------------
+_dist_D_T = scen_D.funding_ratio_distribution(_LAST_DATE)
+_dist_B_T = scen_B.funding_ratio_distribution(_LAST_DATE)
+assert float(np.mean(_dist_D_T)) >= float(np.mean(_dist_B_T)), (
+    "mean(DG_T) in D muss >= B sein — SB wirkt in die falsche Richtung"
+)
+assert np.all(_dist_D_T >= _dist_B_T - 1e-15), (
+    "D ist B + reiner Asset-Inflow bei gleichen Schocks — DG_T muss "
+    "pfadweise >= B sein"
+)
+print(f"  => Assert 4 OK — mean(DG_T): D = {float(np.mean(_dist_D_T)):.2%} >= "
+      f"B = {float(np.mean(_dist_B_T)):.2%} (pfadweise >=).")
+
 
 # =============================================================================
 # 6. DISTRIBUTIONS + PLOTS  ->  output/stage_5d/
@@ -396,11 +450,12 @@ _COLORS = {
     "A' (Buy-and-Hold, GC-Engine)": "#264653",
     "B (Fix-Mix 40/60)": "#2a9d8f",
     "C (Shift 60/40 ab Jahr 5)": "#e76f51",
+    "D (B + Sanierung)": "#7b2cbf",
 }
 _x = [np.datetime64(d) for d in fan_dates]
 
 # ---- v1: DG-Quantilfaecher je Szenario ---------------------------------------
-for tag, (name, scen_dists) in zip(("Aprime", "B", "C"), dists.items()):
+for tag, (name, scen_dists) in zip(("Aprime", "B", "C", "D"), dists.items()):
     q = {p: np.array([np.percentile(scen_dists[d], p) for d in fan_dates])
          for p in _QUANTILES}
     fig, ax = plt.subplots(figsize=(11, 5))
@@ -460,6 +515,41 @@ ax.grid(True, linestyle="--", alpha=0.5)
 ax.legend(ncol=2)
 plt.tight_layout()
 _path = os.path.join(OUT_DIR, "v3_weight_paths_B_vs_C.png")
+fig.savefig(_path, dpi=150, bbox_inches="tight")
+print(f"  Saved: {_path}")
+
+# ---- v4: SB-Statistik (Szenario D) -------------------------------------------
+cum_sb = np.array([float(ev["payoff"].sum()) for ev in sb_events])
+years_active = np.array([len(ev) for ev in sb_events])
+share_active = float(years_active.sum()) / (N_PATHS * HORIZON_YEARS)
+
+_sb_years = list(range(START_YEAR + 1, START_YEAR + HORIZON_YEARS + 1))
+_year_frac = [
+    sum(1 for ev in sb_events if not ev.empty
+        and (pd.to_datetime(ev["time"]).dt.year == y).any()) / N_PATHS
+    for y in _sb_years
+]
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.5))
+ax1.bar(_sb_years, np.array(_year_frac) * 100, color="#7b2cbf", alpha=0.8)
+ax1.set_title(f"Anteil Pfade mit SB je Jahr "
+              f"(aktive Pfadjahre gesamt: {share_active:.1%})")
+ax1.set_xlabel("Zahlungsjahr")
+ax1.set_ylabel("Anteil Pfade (%)")
+ax1.set_ylim(0, 100)
+ax1.grid(True, linestyle="--", alpha=0.5)
+ax2.hist(cum_sb / 1e6, bins=15, color="#7b2cbf", alpha=0.8)
+ax2.axvline(float(np.mean(cum_sb)) / 1e6, color="black", linestyle="--",
+            linewidth=1.5, label=f"Mittel CHF {float(np.mean(cum_sb))/1e6:,.0f}m")
+ax2.set_title("Kumulierte SB pro Pfad (Verteilung)")
+ax2.set_xlabel("Kumulierte SB (CHF Mio.)")
+ax2.set_ylabel("Anzahl Pfade")
+ax2.grid(True, linestyle="--", alpha=0.5)
+ax2.legend()
+fig.suptitle(f"Stage 5d — Sanierungsbeitraege Szenario D "
+             f"(trigger=100%, sb_factor=0.5, {N_PATHS} Pfade)")
+plt.tight_layout()
+_path = os.path.join(OUT_DIR, "v4_sb_statistik.png")
 fig.savefig(_path, dpi=150, bbox_inches="tight")
 print(f"  Saved: {_path}")
 
