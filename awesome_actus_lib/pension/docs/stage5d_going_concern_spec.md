@@ -1,4 +1,4 @@
-# Stage 5d — Going Concern (Goal 2): Spec für Claude Code
+# Stage 5d — Going Concern (Goal 2): Implementation Note
 
 ## Ziel & Scope
 
@@ -9,10 +9,10 @@ bleibt Stage 5c **byte-identisch** (Regressionsprinzip wie λ=0 /
 cal_year=None).
 
 1. Reinvestment + Fixed-Mix-Rebalancing auf Zielgewichte (Stufe 1)
-2. Allokations-Shift-Experiment (Szenarien A/B/C/D)
+2. Allokations-Shift-Experiment (Szenarien A'/B/C/D)
 3. DG-konditionaler Sanierungsbeitrag als reiner Asset-Inflow (minimales
    Stufe-2-Element)
-4. Plots/Dashboard für das Freitags-Meeting
+4. Plots/Dashboard für Review und Thesis-Discussion
 
 **NICHT bauen:** Minder-/Nullverzinsung (verändert AGH → Liability-Events →
 bricht generate-then-pair). Nur als Outlook dokumentieren, mit der
@@ -23,9 +23,10 @@ Architektur-Regel unten.
 > DG-Feedback ist genau dann mit der generate-then-pair-Architektur
 > vereinbar, wenn die Massnahme keine Liability-Events erzeugt oder
 > verändert. Sanierungsbeiträge (Art. 65d BVG) werden nicht dem
-> Altersguthaben gutgeschrieben ⇒ reiner Asset-Inflow ⇒ kompatibel, da der
-> per-Pfad-Asset-Roll in 5c ohnehin sequenziell läuft und DG_t in-loop
-> verfügbar ist. Minder-/Nullverzinsung wirkt aufs AGH ⇒ Liability-Pfade
+> Altersguthaben gutgeschrieben ⇒ reiner Asset-Inflow ⇒ kompatibel. Der
+> sequenzielle per-Pfad-Asset-Roll wird in Stage 5d in der Subclass
+> `GoingConcernFundingRatioAnalysis` eingeführt; dort ist DG_t in-loop
+> verfügbar. Minder-/Nullverzinsung wirkt aufs AGH ⇒ Liability-Pfade
 > müssten neu generiert werden ⇒ Outlook (Stufe 2 voll).
 
 ## Implementierung
@@ -62,15 +63,20 @@ class GoingConcernFundingRatioAnalysis(StochasticFundingRatioAnalysis):
     def __init__(self, ..., rebalancing: RebalancingPolicy | None = None,
                  sanierung: SanierungsPolicy | None = None,
                  equity_return: float = 0.03,          # Buchwert-Drift, Mark-to-Model-Vereinfachung
+                 equity_sigma: float = 0.0,            # optionaler erwartungstreuer lognormaler Equity-Schock
+                 equity_seed: int | None = None,       # reproduzierbare Equity-Pfadkopplung
+                 bond_yield: float | None = None,      # Yield auf inkrementellem BONDS-Bestand
                  initial_weights: dict[str, float] = ...):
         ...
 ```
 
 **Per-Pfad-Roll (Override von `_path_V`), Reihenfolge pro Jahr:**
 
-1. **Accrue** je Bucket: BONDS aus dem bestehenden Roll (ACTUS-PAM-Events /
-   Buch-Yield — exakt prüfen, wie 5c das heute macht); EQUITY mit konstantem
-   `equity_return`.
+1. **Accrue** je Bucket: BONDS aus den ACTUS-PAM-`IP`-Events der
+   Originalkontrakte plus optionalem `bond_yield` auf dem inkrementellen
+   BONDS-Bestand oberhalb des Anfangsbuchwerts; EQUITY mit `equity_return`
+   und optionalem erwartungstreuem lognormalem Jahresschock (`equity_sigma`,
+   `equity_seed`).
 2. **Net-Liability-CF** aus dem gepairten `LiabilityPath`
    zuführen/entnehmen, proportional zu aktuellen Gewichten.
 3. **Sanierung:** wenn aktiv (DG_{t-1} < trigger, Hysterese via exit_dg,
@@ -99,16 +105,21 @@ direkt im Event-Stream. Pragmatische, dokumentierte Wahl: SB ∝ SAV_CONTRIB
 
 | Szenario | Setup |
 |---|---|
-| A | Legacy 5c: kein Reinvestment (Referenz / Regression) |
+| ref_5c | Legacy Stage 5c: reine Regressionsreferenz, kein Strategievergleich |
+| A' | echtes Buy-and-Hold in der Going-Concern-Engine; keine Rebalancing-Termine im Horizont |
 | B | Reinvest + Fixed-Mix 40% BONDS / 60% EQUITY, jährlich |
 | C | wie B, Shift auf 60/40 ab Jahr 5 ("mortgage→bonds"-Beispiel der Ausschreibung) |
 | D | wie B + SanierungsPolicy(trigger=1.00, sb_factor=0.5) |
+
+`Stage5d_going_concern_quickstart.py` vergleicht A'/B/C/D. Legacy Stage 5c
+wird nur noch für den Assert verwendet:
+`rebalancing=None, sanierung=None` muss identisch zur Stage-5c-Verteilung
+bleiben.
 
 **Outputs (PNG + Dashboard-Tab):**
 
 - DG-Quantilfächer (5/25/50/75/95%) je Szenario über t
 - P(DG_t < 100%)-Kurve, alle Szenarien in einem Plot
-- Verteilung DG_T (Histogramm/KDE) A–D
 - SB-Statistik: Anteil aktiver Pfad-Jahre, kumulierte SB in CHF (Verteilung)
 - Gewichtspfade B vs. C (zeigt den Shift sichtbar)
 
@@ -122,15 +133,28 @@ direkt im Event-Stream. Pragmatische, dokumentierte Wahl: SB ∝ SAV_CONTRIB
 4. Sanity: mean(DG_T) in D ≥ B (SB wirkt in die richtige Richtung).
 5. C: Gewichtspfad dokumentiert den Shift ab Jahr 5.
 
-## Doku-Pflichten
+## Dokumentierte Limitations
 
-- `docs/stage5.md` auf 5a–5d nachziehen (ist stale, 5b fehlt schon).
-- Limitations explizit: Equity als Buchwert-Drift, SB ∝ Sparbeiträge, keine
-  Minderverzinsung (→ Outlook mit Architektur-Regel), keine
-  Transaktionskosten-Kalibrierung.
+- Equity als Buchwert-Drift mit optionalem lognormalem Jahresschock.
+- SB ∝ Sparbeiträge (`SAV_CONTRIB`) statt exakter Lohnsumme.
+- Keine Minder-/Nullverzinsung, weil diese AGH und Liability-Events ändern
+  würde (→ Outlook mit Architektur-Regel).
+- Keine Transaktionskosten-Kalibrierung.
 
-## Nicht-Ziele für Freitag
+## Implementierter Stand
+
+- `equity_sigma` erzeugt erwartungstreue lognormale Jahresschocks um
+  `equity_return`; `equity_seed` koppelt die Equity-Pfade reproduzierbar über
+  A'/B/C/D.
+- `bond_yield` ist eine Buch-Yield-Approximation auf den positiven
+  inkrementellen BONDS-Bestand. Die Original-Bonds bleiben durch ihre
+  ACTUS-`IP`-Events verankert.
+- Sanierungsbeiträge werden als `SANIERUNG_SB` in einem separaten
+  `gc_events(...)`-Log geführt.
+- Der Liability-Stream bleibt unverändert; `SANIERUNG_SB` wird nie als
+  Liability-Event geschrieben.
+
+## Bewusst Nicht Umgesetzt
 
 Kein obli/überobli-Split, keine Steuern/Verwaltungskosten, keine
-Minderverzinsung, keine Kostenkalibrierung. Git: nach jedem grünen Baustein
-sofort committen.
+Minderverzinsung, keine Kostenkalibrierung.

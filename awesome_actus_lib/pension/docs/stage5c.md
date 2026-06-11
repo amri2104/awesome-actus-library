@@ -64,12 +64,14 @@ so the regulatory headline KPI shows longevity risk.
 **Out of scope (explicit, parked):**
 - **Dynamic technical rate / revaluation shock** (FRP-4-floor stepped
   `i_tech` reacting to the Hull-White paths). Regulatorily realistic, no
-  P/Q issue — candidate for a later stage (5d).
-- **Recovery measures** (Zins-Ablation, Sanierungsbeiträge, indexation
-  stop on `DG < 100%`). This is **Goal 2** territory and requires
-  supervisor scoping; it breaks the generate-then-pair architecture
-  because the liability path would become conditional on the realised
-  asset-driven DG (asset/liability interleaving).
+  P/Q issue — candidate for a later extension.
+- **Recovery measures.** Stage 5c itself does not implement DG-feedback.
+  Stage 5d adds the architecture-compatible subset: asset-only measures
+  such as Sanierungsbeiträge that do not create or modify liability
+  events. Measures that change accrued savings or liability-event
+  generation, such as Minder-/Nullverzinsung, remain out of scope because
+  the liability path would need to be regenerated conditional on the
+  realised asset-driven DG.
 - **Market-consistent stochastic discounting** of cashflows at the
   path-specific short rate. Different valuation object, introduces a P/Q
   measure-consistency problem; not the regulatory question.
@@ -211,10 +213,11 @@ no pytest):
 ## 9. What Stage 5c still does not do
 
 - **Dynamic technical rate / revaluation shock** (stepped `i_tech` via
-  FRP-4 floor on low-rate paths) — Stage 5d candidate.
-- **Recovery measures** (interest ablation, Sanierungsbeiträge,
-  indexation stop) — Goal 2; needs supervisor scoping; breaks
-  generate-then-pair (asset/liability interleaving).
+  FRP-4 floor on low-rate paths) — future extension.
+- **Recovery measures.** Asset-only Sanierungsbeiträge are implemented in
+  Stage 5d as a going-concern extension. Liability-feedback measures
+  such as Minder-/Nullverzinsung still require a generate-and-regenerate
+  architecture and remain Outlook.
 - **Market-consistent stochastic discounting** — separate valuation
   lens; P/Q measure-consistency issue.
 - **Survivor benefits** (Witwen-/Witwer-/Waisenrente).
