@@ -353,7 +353,8 @@ print("      => Assert (c) OK — same survivor path drives PC and pension outfl
 print("\n[5] Plots")
 print("-" * 40)
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage5c")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_FIG_DIR = os.path.join(_REPO_ROOT, "output", "stage_5c")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 fan_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 2)]

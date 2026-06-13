@@ -487,7 +487,8 @@ print(f"  (e) additivity residual = {res:.4%} < 5% OK.")
 print("\n[5] Plots")
 print("-" * 40)
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage5b")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_FIG_DIR = os.path.join(_REPO_ROOT, "output", "stage_5b")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 

@@ -411,7 +411,8 @@ print("    => Assert [d] (Seed reproducibility) OK.")
 print("\n[4] Plots")
 print("-" * 40)
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage5a_phase2")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_FIG_DIR = os.path.join(_REPO_ROOT, "output", "stage_5a_phase2")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 def _save(fig, name: str) -> None:

@@ -473,7 +473,8 @@ print("-" * 40)
 
 import matplotlib.pyplot as plt
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage4")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_FIG_DIR = os.path.join(_REPO_ROOT, "output", "stage_4")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 

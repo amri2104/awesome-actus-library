@@ -421,7 +421,8 @@ print(f"  (e) stoch mean ({mean_dg:.2%}) vs det baseline ({fr_t0_det:.2%}) "
 print("\n[4] Plots")
 print("-" * 40)
 
-_FIG_DIR = os.path.join(os.path.dirname(__file__), "figures", "stage5a")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_FIG_DIR = os.path.join(_REPO_ROOT, "output", "stage_5a")
 os.makedirs(_FIG_DIR, exist_ok=True)
 
 
