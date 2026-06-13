@@ -1,6 +1,6 @@
-"""Stage 5d (Baustein 1) — going-concern solvency funding ratio.
+"""Stage 6 (Baustein 1) — going-concern solvency funding ratio.
 
-Spec: ``docs/stage5d_going_concern_spec.md``.
+Spec: ``docs/stage6_going_concern_spec.md``.
 
 Verified hook point (spec asked for this check before coding): Stage 5c's
 ``StochasticFundingRatioAnalysis._path_V`` does NOT run a sequential annual
@@ -923,7 +923,7 @@ def _regression_check_against_5c() -> None:
 
 
 if __name__ == "__main__":
-    print("Stage 5d Baustein 1 — Akzeptanz-Asserts (offline) vs Stage 5c")
+    print("Stage 6 Baustein 1 — Akzeptanz-Asserts (offline) vs Stage 5c")
     print("-" * 64)
     _regression_check_against_5c()
     print("All Baustein-1 asserts passed.")

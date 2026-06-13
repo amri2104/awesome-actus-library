@@ -16,7 +16,7 @@ split into four increments:
   and risk-attribution experiments.
 - **Stage 5c**: forward stochastic solvency funding ratio where both assets
   and pension capital `VK_t,i` are evaluated per path over time.
-- **Stage 5d**: going-concern funding-ratio analysis with reinvestment,
+- **Stage 6**: going-concern funding-ratio analysis with reinvestment,
   fixed-mix rebalancing, allocation shifts and asset-only recovery measures.
 
 Read [stage1.md](stage1.md) to [stage4.md](stage4.md) first for the
@@ -93,9 +93,9 @@ Representative example:
 
 Detailed design notes live in [stage5c.md](stage5c.md).
 
-## 5. Stage 5d — Going-Concern Funding Ratio Analysis
+## 5. Stage 6 — Going-Concern Funding Ratio Analysis
 
-Stage 5d implements Goal 2: allocation changes between asset classes can be
+Stage 6 implements Goal 2: allocation changes between asset classes can be
 simulated in the risk analysis. The implementation lives in
 `awesome_actus_lib.pension.analysis.going_concern`.
 
@@ -159,25 +159,25 @@ regenerating liability paths conditional on realised funding ratios.
 
 Representative example:
 
-- `Stage5d_going_concern_quickstart.py`
+- `Stage6_going_concern_quickstart.py`
 
 Detailed implementation notes live in
-[stage5d_going_concern_spec.md](stage5d_going_concern_spec.md).
+[stage6_going_concern_spec.md](stage6_going_concern_spec.md).
 
 ## 6. Verification
 
 The project currently uses example scripts with hard inline assertions plus a
-small offline pytest smoke for Stage 5d.
+small offline pytest smoke for Stage 6.
 
 Useful commands from the repository root:
 
 ```bash
 PYTHONPATH=. MPLBACKEND=Agg python3 awesome_actus_lib/pension/examples/Stage5c_forward_funding_ratio_quickstart.py
-PYTHONPATH=. MPLBACKEND=Agg python3 awesome_actus_lib/pension/examples/Stage5d_going_concern_quickstart.py
-PYTHONPATH=. python3 -m pytest awesome_actus_lib/pension/tests/test_stage5d_going_concern.py
+PYTHONPATH=. MPLBACKEND=Agg python3 awesome_actus_lib/pension/examples/Stage6_going_concern_quickstart.py
+PYTHONPATH=. python3 -m pytest awesome_actus_lib/pension/tests/test_stage6_going_concern.py
 ```
 
-The Stage 5d quickstart asserts:
+The Stage 6 quickstart asserts:
 
 - `rebalancing=None, sanierung=None` is identical to Stage 5c;
 - `DG_t0` is calibrated to 107.6%;

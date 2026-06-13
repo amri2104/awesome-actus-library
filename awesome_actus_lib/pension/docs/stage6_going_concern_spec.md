@@ -1,4 +1,4 @@
-# Stage 5d — Going Concern (Goal 2): Implementation Note
+# Stage 6 — Going Concern (Goal 2): Implementation Note
 
 ## Ziel & Scope
 
@@ -24,7 +24,7 @@ Architektur-Regel unten.
 > vereinbar, wenn die Massnahme keine Liability-Events erzeugt oder
 > verändert. Sanierungsbeiträge (Art. 65d BVG) werden nicht dem
 > Altersguthaben gutgeschrieben ⇒ reiner Asset-Inflow ⇒ kompatibel. Der
-> sequenzielle per-Pfad-Asset-Roll wird in Stage 5d in der Subclass
+> sequenzielle per-Pfad-Asset-Roll wird in Stage 6 in der Subclass
 > `GoingConcernFundingRatioAnalysis` eingeführt; dort ist DG_t in-loop
 > verfügbar. Minder-/Nullverzinsung wirkt aufs AGH ⇒ Liability-Pfade
 > müssten neu generiert werden ⇒ Outlook (Stufe 2 voll).
@@ -32,7 +32,7 @@ Architektur-Regel unten.
 ## Implementierung
 
 **Ort:** neues Modul `awesome_actus_lib/pension/analysis/going_concern.py` +
-Beispiel `examples/Stage5d_going_concern_quickstart.py`.
+Beispiel `examples/Stage6_going_concern_quickstart.py`.
 
 **Disziplin:** `stochastic_funding_ratio.py` NICHT verändern (höchstens einen
 Hook extrahieren, falls unvermeidbar); bevorzugt Subclass.
@@ -111,7 +111,7 @@ direkt im Event-Stream. Pragmatische, dokumentierte Wahl: SB ∝ SAV_CONTRIB
 | C | wie B, Shift auf 60/40 ab Jahr 5 ("mortgage→bonds"-Beispiel der Ausschreibung) |
 | D | wie B + SanierungsPolicy(trigger=1.00, sb_factor=0.5) |
 
-`Stage5d_going_concern_quickstart.py` vergleicht A'/B/C/D. Legacy Stage 5c
+`Stage6_going_concern_quickstart.py` vergleicht A'/B/C/D. Legacy Stage 5c
 wird nur noch für den Assert verwendet:
 `rebalancing=None, sanierung=None` muss identisch zur Stage-5c-Verteilung
 bleiben.

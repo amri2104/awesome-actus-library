@@ -1,4 +1,4 @@
-"""Stage5d_variations.py — Meeting-Paket Block 5 (Sensitivitaeten).
+"""Stage6_variations.py — Meeting-Paket Block 5 (Sensitivitaeten).
 
 Kleiner Lauf (N_PATHS=60) ueber zwei Hebel der Stage-5d-Engine, nur ueber
 die bestehende oeffentliche API (keine Klassenaenderungen):
@@ -7,7 +7,7 @@ die bestehende oeffentliche API (keine Klassenaenderungen):
   - sanierung.trigger_dg in {0.95, 1.00}   — nur Szenario D (B + Sanierung)
 
 Setup (Bestand, Kalibrierung DG_t0=107.6%, Seeds 42/4242/777, Kurve,
-Hull-White+GBM) ist 1:1 der des Stage5d_going_concern_quickstart, nur mit
+Hull-White+GBM) ist 1:1 der des Stage6_going_concern_quickstart, nur mit
 60 Pfaden. Output -> output/meeting_paket/sensitivitaeten.md.
 """
 
@@ -38,7 +38,7 @@ START_DATE = "2025-01-01T00:00:00"
 START_YEAR = int(START_DATE[:4])
 BASE_DATE = "2025-01-01"
 MARKET_CODE = "IR_SCENARIO"
-N_PATHS = int(os.environ.get("STAGE5D_VARIATIONS_N_PATHS", "60"))
+N_PATHS = int(os.environ.get("STAGE6_VARIATIONS_N_PATHS", "60"))
 SEED_ASSETS = 42
 SEED_LIAB = 4242
 SEED_EQ = 777
@@ -58,7 +58,7 @@ print("=" * 78)
 
 
 # =============================================================================
-# Setup — identisch zum Stage5d_going_concern_quickstart (nur N_PATHS=60)
+# Setup — identisch zum Stage6_going_concern_quickstart (nur N_PATHS=60)
 # =============================================================================
 policy = PensionPolicy()
 liability_fund = PensionFund(policy=policy, start_date=START_DATE)
@@ -212,8 +212,8 @@ for trig in TRIGGER_GRID:
 # Output — sensitivitaeten.md
 # =============================================================================
 lines = []
-lines.append("# Meeting-Paket — Sensitivitaeten (Stage 5d)\n")
-lines.append(f"- Skript: `examples/Stage5d_variations.py`, "
+lines.append("# Meeting-Paket — Sensitivitaeten (Stage 6)\n")
+lines.append(f"- Skript: `examples/Stage6_variations.py`, "
              f"**N_PATHS = {N_PATHS}**, Horizont {HORIZON_YEARS} Jahre, "
              f"KPIs am {D_T}")
 lines.append(f"- Setup identisch zum Quickstart (Seeds {SEED_ASSETS}/"

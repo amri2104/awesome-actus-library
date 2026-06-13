@@ -1,7 +1,7 @@
 # Meeting-Briefing — Pension-ALM-Extension (Stages 1–5d)
 
 Stand: kanonischer Lauf mit `N_PATHS=200`
-(`examples/Stage5d_meeting_paket_run.py`, alle Spec-Asserts grün,
+(`examples/Stage6_meeting_paket_run.py`, alle Spec-Asserts grün,
 Laufzeit 57.5 s). Zahlen in diesem Dokument stammen aus
 `output/meeting_paket/summary_kpis.md`.
 
@@ -57,7 +57,7 @@ Risikoquellen sind.
 
 ---
 
-## 2. Ziel 2 — Was Stage 5d gebaut hat und warum
+## 2. Ziel 2 — Was Stage 6 gebaut hat und warum
 
 ### Was (alles in `analysis/going_concern.py`, opt-in)
 
@@ -103,7 +103,7 @@ Risikoquellen sind.
 - **Regressionsdisziplin:** jeder neue Parameter ist opt-in; mit
   `rebalancing=None, sanierung=None` ist das Ergebnis byte-identisch zu
   Stage 5c (Spec-Assert 1, zusätzlich pytest-Smoke
-  `tests/test_stage5d_going_concern.py`).
+  `tests/test_stage6_going_concern.py`).
 
 ---
 
@@ -223,7 +223,7 @@ obli/überobli-Split, Wertschwankungsreserven-Mechanik.
 | UWS-Pfad / Lohn / Indexierung | `Stage4Dynamics(conversion_rate_path={...}, salary_growth=..., threshold_index_period=...)` |
 | Allokations-Szenarien | `RebalancingPolicy(target_weights, frequency_years, cost_bps, shift_at_year, shift_weights)` |
 | Sanierungs-Trigger/-Höhe | `SanierungsPolicy(trigger_dg, exit_dg, sb_factor, max_years)` |
-| Umfang | `N_PATHS` (Env `STAGE5D_N_PATHS`), Seeds, `horizon_years` |
+| Umfang | `N_PATHS` (Env `STAGE6_N_PATHS`), Seeds, `horizon_years` |
 
 **Degenerations-Prinzip:** jede Variation kollabiert per Assert auf ihren
 Basisfall — `rebalancing=None, sanierung=None` ⇒ byte-identisch 5c;

@@ -1,7 +1,7 @@
-"""Stage5d_going_concern_quickstart.py
+"""Stage6_going_concern_quickstart.py
 
-Stage 5d (Baustein 2) — Allokations-Shift-Experiment auf dem going-concern
-Asset-Roll (Spec: docs/stage5d_going_concern_spec.md):
+Stage 6 (Baustein 2) — Allokations-Shift-Experiment auf dem going-concern
+Asset-Roll (Spec: docs/stage6_going_concern_spec.md):
 
   A' echtes Buy-and-Hold in der GC-Engine: gleiche Buckets/Schocks wie B/C,
      aber nie rebalancen (frequency_years > Horizont — reine Konfiguration)
@@ -58,7 +58,7 @@ START_DATE = "2025-01-01T00:00:00"
 START_YEAR = int(START_DATE[:4])
 BASE_DATE = "2025-01-01"
 MARKET_CODE = "IR_SCENARIO"
-N_PATHS = int(os.environ.get("STAGE5D_N_PATHS", "60"))
+N_PATHS = int(os.environ.get("STAGE6_N_PATHS", "60"))
 SEED_ASSETS = 42
 SEED_LIAB = 4242
 SEED_EQ = 777
@@ -74,10 +74,10 @@ EQ_SIGMA = 0.10
 BOND_YIELD = 0.02
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-OUT_DIR = os.path.join(_REPO_ROOT, "output", "stage_5d")
+OUT_DIR = os.path.join(_REPO_ROOT, "output", "stage_6")
 
 print("=" * 78)
-print("PENSION ALM CASE STUDY — Stage 5d — going-concern Allokations-Experiment")
+print("PENSION ALM CASE STUDY — Stage 6 — going-concern Allokations-Experiment")
 print("=" * 78)
 
 
@@ -433,7 +433,7 @@ print(f"  => Assert 4 OK — mean(DG_T): D = {float(np.mean(_dist_D_T)):.2%} >= 
 
 
 # =============================================================================
-# 6. DISTRIBUTIONS + PLOTS  ->  output/stage_5d/
+# 6. DISTRIBUTIONS + PLOTS  ->  output/stage_6/
 # =============================================================================
 print("\n[6] Plots")
 print("-" * 40)
@@ -464,7 +464,7 @@ for tag, (name, scen_dists) in zip(("Aprime", "B", "C", "D"), dists.items()):
     ax.fill_between(_x, q[25] * 100, q[75] * 100, color=col, alpha=0.35, label="p25-p75")
     ax.plot(_x, q[50] * 100, color=col, marker="o", linewidth=2, label="Median (p50)")
     ax.axhline(100, color="red", linestyle="--", linewidth=1, label="100% Deckung")
-    ax.set_title(f"Stage 5d — DG-Quantilfaecher Szenario {name} ({N_PATHS} Pfade)")
+    ax.set_title(f"Stage 6 — DG-Quantilfaecher Szenario {name} ({N_PATHS} Pfade)")
     ax.set_xlabel("Stichtag")
     ax.set_ylabel("Deckungsgrad (%)")
     ax.grid(True, linestyle="--", alpha=0.5)
@@ -480,7 +480,7 @@ for name, scen_dists in dists.items():
     p_under = [float(np.mean(scen_dists[d] < 1.0)) for d in fan_dates]
     ax.plot(_x, np.array(p_under) * 100, marker="o", linewidth=2,
             color=_COLORS[name], label=name)
-ax.set_title(f"Stage 5d — Unterdeckungswahrscheinlichkeit P(DG_t < 100%) "
+ax.set_title(f"Stage 6 — Unterdeckungswahrscheinlichkeit P(DG_t < 100%) "
              f"({N_PATHS} Pfade)")
 ax.set_xlabel("Stichtag")
 ax.set_ylabel("P(DG < 100%) (%)")
@@ -507,7 +507,7 @@ ax.step(reb_c["date"], reb_c["w_BONDS"] * 100, where="post", linewidth=1.5,
         linestyle="--", color=_COLORS["C (Shift 60/40 ab Jahr 5)"], label="C: w_BONDS")
 ax.axvline(np.datetime64(f"{START_YEAR + 5}-01-01"), color="grey",
            linestyle=":", linewidth=1.5, label="Shift ab Jahr 5")
-ax.set_title("Stage 5d — Gewichtspfade (post-rebalance) B vs C")
+ax.set_title("Stage 6 — Gewichtspfade (post-rebalance) B vs C")
 ax.set_xlabel("Rebalancing-Termin")
 ax.set_ylabel("Gewicht (%)")
 ax.set_ylim(0, 100)
@@ -546,7 +546,7 @@ ax2.set_xlabel("Kumulierte SB (CHF Mio.)")
 ax2.set_ylabel("Anzahl Pfade")
 ax2.grid(True, linestyle="--", alpha=0.5)
 ax2.legend()
-fig.suptitle(f"Stage 5d — Sanierungsbeitraege Szenario D "
+fig.suptitle(f"Stage 6 — Sanierungsbeitraege Szenario D "
              f"(trigger=100%, sb_factor=0.5, {N_PATHS} Pfade)")
 plt.tight_layout()
 _path = os.path.join(OUT_DIR, "v4_sb_statistik.png")

@@ -19,7 +19,7 @@ Library:
   loss analysis.
 - Asset and liability cashflows meet in shared ALM, liquidity, value and
   funding-ratio analyses.
-- Stage 5d adds a going-concern funding-ratio extension with buy-and-hold,
+- Stage 6 adds a going-concern funding-ratio extension with buy-and-hold,
   fixed-mix rebalancing, allocation-shift and asset-only recovery-measure
   scenarios.
 
@@ -39,7 +39,7 @@ standard for Swiss pension-fund ALM.
 
 - `awesome_actus_lib/pension/examples/Stage4_pension_quickstart.py`
 - `awesome_actus_lib/pension/examples/Stage5c_forward_funding_ratio_quickstart.py`
-- `awesome_actus_lib/pension/examples/Stage5d_going_concern_quickstart.py`
+- `awesome_actus_lib/pension/examples/Stage6_going_concern_quickstart.py`
 
 ## Install
 
@@ -50,7 +50,7 @@ pip install awesome-actus-lib
 For local thesis runs from the repository root:
 
 ```bash
-PYTHONPATH=. python3 awesome_actus_lib/pension/examples/Stage5d_going_concern_quickstart.py
+PYTHONPATH=. python3 awesome_actus_lib/pension/examples/Stage6_going_concern_quickstart.py
 ```
 
 ## Documentation

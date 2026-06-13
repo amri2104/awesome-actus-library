@@ -66,7 +66,7 @@ so the regulatory headline KPI shows longevity risk.
   `i_tech` reacting to the Hull-White paths). Regulatorily realistic, no
   P/Q issue — candidate for a later extension.
 - **Recovery measures.** Stage 5c itself does not implement DG-feedback.
-  Stage 5d adds the architecture-compatible subset: asset-only measures
+  Stage 6 adds the architecture-compatible subset: asset-only measures
   such as Sanierungsbeiträge that do not create or modify liability
   events. Measures that change accrued savings or liability-event
   generation, such as Minder-/Nullverzinsung, remain out of scope because
@@ -215,7 +215,7 @@ no pytest):
 - **Dynamic technical rate / revaluation shock** (stepped `i_tech` via
   FRP-4 floor on low-rate paths) — future extension.
 - **Recovery measures.** Asset-only Sanierungsbeiträge are implemented in
-  Stage 5d as a going-concern extension. Liability-feedback measures
+  Stage 6 as a going-concern extension. Liability-feedback measures
   such as Minder-/Nullverzinsung still require a generate-and-regenerate
   architecture and remain Outlook.
 - **Market-consistent stochastic discounting** — separate valuation
