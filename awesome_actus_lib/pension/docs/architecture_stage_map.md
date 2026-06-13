@@ -63,7 +63,7 @@ the simulators, never pressed into contract terms.
               →→→   CashFlowStream schema   ←←←
                   (time · type · payoff · contractId)
                               |
-              SHARED ANALYSIS LAYER (AAL core untouched)
+              SHARED ANALYSIS LAYER (AAL analysis reused as-is)
        Liquidity · Value · Income · ALM · FundingRatio · RiskAttribution
                               |
               STOCHASTICS (generate-then-pair, separate seeds)
@@ -75,9 +75,13 @@ the simulators, never pressed into contract terms.
 
 Deliberate thesis boundary: the asset side is ACTUS-native; the Swiss BVG
 liability side is a **documented domain engine** attached to the shared
-cashflow and ALM layer. No AAL core file was modified — both sides converge on
-the `CashFlowStream` object (`cohort_id` acts as `contractID`), which the
-existing analysis layer consumes unchanged.
+cashflow and ALM layer. The AAL core stayed functionally unchanged and the
+extension is additive — both sides converge on the `CashFlowStream` object
+(`cohort_id` acts as `contractID`), which the existing analysis layer consumes
+as-is. The only edits to AAL core are three backward-compatible robustness
+fixes (explicit `format="ISO8601"` date parsing in `analysis/liquidity.py`,
+`analysis/value.py` and `models/portfolioPlot.py`, plus one cosmetic `print`
+change) — no public signature or numerical behaviour changed.
 
 ---
 
