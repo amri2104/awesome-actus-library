@@ -1,4 +1,4 @@
-"""Stage6_variations.py — Meeting-Paket Block 5 (Sensitivitaeten).
+"""Stage6_variations.py — Stage 6 sensitivities (variations).
 
 Kleiner Lauf (N_PATHS=60) ueber zwei Hebel der Stage-5d-Engine, nur ueber
 die bestehende oeffentliche API (keine Klassenaenderungen):
@@ -8,7 +8,7 @@ die bestehende oeffentliche API (keine Klassenaenderungen):
 
 Setup (Bestand, Kalibrierung DG_t0=107.6%, Seeds 42/4242/777, Kurve,
 Hull-White+GBM) ist 1:1 der des Stage6_going_concern_quickstart, nur mit
-60 Pfaden. Output -> output/meeting_paket/sensitivitaeten.md.
+60 Pfaden. Output -> output/stage_6/sensitivitaeten.md.
 """
 
 import os
@@ -49,11 +49,11 @@ EQ_SIGMA_GRID = (0.05, 0.10, 0.15)
 TRIGGER_GRID = (0.95, 1.00)
 
 _REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-OUT_DIR = os.path.join(_REPO, "output", "meeting_paket")
+OUT_DIR = os.path.join(_REPO, "output", "stage_6")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 print("=" * 78)
-print(f"MEETING-PAKET BLOCK 5 — Stage-5d-Sensitivitaeten (N_PATHS={N_PATHS})")
+print(f"STAGE 6 — Sensitivitaeten (N_PATHS={N_PATHS})")
 print("=" * 78)
 
 
@@ -212,7 +212,7 @@ for trig in TRIGGER_GRID:
 # Output — sensitivitaeten.md
 # =============================================================================
 lines = []
-lines.append("# Meeting-Paket — Sensitivitaeten (Stage 6)\n")
+lines.append("# Stage 6 — Sensitivitaeten\n")
 lines.append(f"- Skript: `examples/Stage6_variations.py`, "
              f"**N_PATHS = {N_PATHS}**, Horizont {HORIZON_YEARS} Jahre, "
              f"KPIs am {D_T}")

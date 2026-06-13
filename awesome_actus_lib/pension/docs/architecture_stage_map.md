@@ -28,10 +28,9 @@ stage→class mappings below are valid regardless of the file names.
 | **6** | Going-concern funding ratio: reinvestment, fixed-mix rebalancing, allocation shift, asset-only recovery measure | `GoingConcernFundingRatioAnalysis`, `RebalancingPolicy`, `SanierungsPolicy` | `analysis/going_concern.py` |
 
 > Per-stage design notes live in the sibling docs `stage1.md` … `stage5c.md`
-> and `stage6_going_concern_spec.md`. The consolidated rationale and
-> defence statements are in `meeting_briefing.md`. Those documents still use
-> the old `StageN_*.py` simulator file names (left untouched by the
-> code-only rename scope); the class names they cite are unchanged.
+> and `stage6_going_concern_spec.md`. Those documents still use the old
+> `StageN_*.py` simulator file names (left untouched by the code-only rename
+> scope); the class names they cite are unchanged.
 
 ---
 
