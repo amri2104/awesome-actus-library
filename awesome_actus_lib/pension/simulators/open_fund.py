@@ -9,7 +9,7 @@ from ..cohort import Cohort
 from ..entry import EntryPolicy
 from ..fund import _DummyPortfolio, PensionFund
 from ..mortality import MortalityTable
-from .Stage1_closed import ClosedFundSimulator
+from .closed_fund import ClosedFundSimulator
 
 
 class OpenFundSimulator(ClosedFundSimulator):

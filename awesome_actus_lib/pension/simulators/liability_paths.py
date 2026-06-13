@@ -10,7 +10,7 @@ from ...models.cashFlowStream import CashFlowStream
 from ..entry import EntryPolicy
 from ..fund import PensionFund
 from ..mortality import MortalityTable
-from .Stage4_dynamic import DynamicFundSimulator, Stage4Dynamics
+from .dynamic_fund import DynamicFundSimulator, Stage4Dynamics
 
 
 @dataclass(frozen=True)

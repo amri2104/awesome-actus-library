@@ -6,9 +6,9 @@
            + deterministic salary growth + falling UWS path)
 """
 
-from .Stage1_closed import ClosedFundSimulator
-from .Stage2_open import OpenFundSimulator
-from .Stage4_dynamic import DynamicFundSimulator, Stage4Dynamics
+from .closed_fund import ClosedFundSimulator
+from .open_fund import OpenFundSimulator
+from .dynamic_fund import DynamicFundSimulator, Stage4Dynamics
 from .liability_paths import LiabilityPath, simulate_liability_paths
 
 __all__ = [

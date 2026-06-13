@@ -7,7 +7,7 @@ from .. import events as ev
 from ..entry import EntryPolicy
 from ..fund import PensionFund
 from ..mortality import MortalityTable
-from .Stage2_open import OpenFundSimulator
+from .open_fund import OpenFundSimulator
 
 
 @dataclass(frozen=True)
