@@ -1,10 +1,4 @@
-"""Stage-specific simulators for the pension extension.
-
-- Stage 1: ClosedFundSimulator (closed fund, no new entrants)
-- Stage 2: OpenFundSimulator   (open fund, deterministic new entrants)
-- Stage 4: DynamicFundSimulator (open fund + Stage-3 mortality
-           + deterministic salary growth + falling UWS path)
-"""
+"""Pension fund simulators."""
 
 from .closed_fund import ClosedFundSimulator
 from .open_fund import OpenFundSimulator

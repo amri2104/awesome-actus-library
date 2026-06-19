@@ -44,6 +44,7 @@ class RetirementLossAnalysis:
                  policy: PensionPolicy, mortality: MortalityTable):
         if mortality is None:
             raise ValueError(
+                "RetirementLossAnalysis requires a MortalityTable, got mortality=None."
             )
         self.liability_cf = liability_cf
         self.policy = policy

@@ -1,10 +1,4 @@
-"""Stage5b_mortality_quickstart.py
-
-Stage 5b — stochastic LIABILITY side (binomial cohort transitions) on top of Stage 5a:
-  - Stage-4 deterministic liability backbone + Stage 5a mixed asset portfolio
-  - RiskAttribution sweep over five configs:
-      baseline / mortality retirees / mortality all / assets only / full
-"""
+"""Stage 5b - stochastic liability side (binomial cohort transitions): RiskAttribution sweep over five configs."""
 
 import os
 
@@ -42,9 +36,6 @@ print("=" * 78)
 print("PENSION ALM CASE STUDY — Stage 5b — stochastic liability side (mortality)")
 print("=" * 78)
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side) — same fund as Stage 4/5a
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (same fund as Stage 4/5a)")
 print("-" * 40)
 
@@ -140,10 +131,7 @@ dynamics = Stage4Dynamics(
     conversion_rate_path={2025: 0.0523, 2029: 0.0510},
     threshold_index_period=5,
 )
-# Generational EK 2001-2005 (1.25%/yr improvement from 2003): lifts ä_x to a
-# realistic level for solvency/funding-ratio valuation (PC values retirees via
-# ä_x). Harmless for liquidity-lens analyses — the headcount decrement is
-# unaffected (no cal_year is passed there).
+# Generational EK 2001-2005: improvement applies to both projected headcounts and the ä_x valuation.
 mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 print(f"  Active cohorts: 8 birth-year buckets, retirement age 65")
@@ -156,9 +144,6 @@ print(f"  Mortality:    EK 2001-2005 generational (improvement 1.25%/yr from 200
 print(f"  Horizon:      {HORIZON_YEARS} years")
 
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side) — mixed fixed + floating ladder
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets (mixed fixed + floating ladder)")
 print("-" * 40)
 
@@ -244,9 +229,6 @@ print(f"  Asset 4: CHF  40,000,000 floating PAM, +80bp spread, matures 2050")
 print(f"  Total notional: CHF 400,000,000  (65% fixed / 35% floating)")
 
 
-# =============================================================================
-# 2. CURVE CALIBRATION (CHF-like base curve, same as Stage 5a)
-# =============================================================================
 print("\n[2] Curve calibration")
 print("-" * 40)
 
@@ -257,9 +239,6 @@ print(f"  Base curve: {curve_rates[0]:.2%} (1Y) -> {curve_rates[-1]:.2%} (10Y), 
       f"flat-forward beyond 10Y")
 
 
-# =============================================================================
-# 3. SOLVENCY FUNDING RATIO @ t0 (Art. 44 BVV2) — INVARIANT under stoch. mort.
-# =============================================================================
 print("\n[3] Solvency funding ratio @ t0 (Art. 44 BVV2 — invariant under stoch. mortality)")
 print("-" * 40)
 
@@ -276,9 +255,6 @@ print("  (Same number under deterministic and stochastic mortality —")
 print("   PC_t0 uses only t0 cohort sizes + deterministic annuity ä_x.)")
 
 
-# =============================================================================
-# 4. RISK ATTRIBUTION — five-config sweep
-# =============================================================================
 print("\n[4] Risk Attribution — five-config sweep")
 print("-" * 40)
 
@@ -318,13 +294,10 @@ print(f"    |Var(full) - [Var(assets) + Var(mort_all)]| / Var(full): "
       f"{attr['additivity_residual']:.4%}")
 
 
-# =============================================================================
-# VERIFY — inline asserts (a)-(e)
-# =============================================================================
 print("\n[VERIFY] Inline asserts")
 print("-" * 40)
 
-# (a) Determinism collapse: stochastic_mortality=False → two runs identical
+# (a) determinism collapse: two deterministic runs identical
 sim_det_1 = DynamicFundSimulator(
     fund=liability_fund, entry_policy=entry_policy, dynamics=dynamics,
     mortality=mortality,
@@ -340,8 +313,7 @@ events_b = cf_det_2.events_df.sort_values(["contractId", "time", "type"]).reset_
 pd.testing.assert_frame_equal(events_a, events_b)
 print(f"  (a) determinism collapse OK ({len(events_a)} events identical).")
 
-# (b) Falsification of mortality wiring: σ_IR=0, stochastic_mortality=True →
-#     liquidity-DG distribution has std > 0. If not, mortality is not wired in.
+# (b) with IR vol = 0, stochastic mortality alone must give std > 0
 liab_paths_b = simulate_liability_paths(
     fund=liability_fund, entry_policy=entry_policy, dynamics=dynamics,
     mortality=mortality,
@@ -362,8 +334,7 @@ assert std_b > 1e-6, \
     f"(b) σ_IR=0 + stoch mort produced zero std: {std_b:.2e} — mortality not wired"
 print(f"  (b) mortality wired in (σ_IR=0 → std(FR) = {std_b:.4%}) OK.")
 
-# (c) LLN diversification (Maffra Fig. 11): scale cohorts ×10, pensions ÷10
-#     (PC invariant) → mortality variance must shrink by ~factor 10.
+# (c) LLN diversification: scale cohorts x10, pensions /10 (PC invariant) shrinks mortality variance ~10x.
 scaled_fund = PensionFund(policy=policy, start_date=START_DATE)
 for c in liability_fund.cohorts:
     scaled_fund.add_cohort(Cohort(
@@ -389,7 +360,7 @@ liab_paths_lln = simulate_liability_paths(
     horizon_years=HORIZON_YEARS, n_paths=n_lln,
     seed=SEED_LIAB, mortality_filter="all",
 )
-# Build deterministic asset CFS at scaled notionals (×10) to keep FR invariant.
+# Scale asset notionals x10 to keep the funding ratio invariant.
 scaled_assets = Portfolio([
     PAM(
         contractID=c.terms["contractID"].value,
@@ -434,7 +405,7 @@ fr_dist_lln = np.array([
     ).funding_ratio(as_of=BASE_DATE)
     for lp in liab_paths_lln
 ])
-# Reference variance at original scale, using same number of paths for fairness.
+# Reference variance at original scale, same number of paths for a fair comparison.
 liab_paths_ref = simulate_liability_paths(
     fund=liability_fund, entry_policy=entry_policy, dynamics=dynamics,
     mortality=mortality,
@@ -455,7 +426,7 @@ print(f"  (c) LLN factor (variance scale ×1 / scale ×10) = {factor:.2f} "
 if not (8.0 <= factor <= 12.0):
     print(f"      WARNING: LLN factor {factor:.2f} outside [8, 12] tolerance.")
 
-# (d) Reproducibility: identical seed → identical liabilities CFS list.
+# (d) identical seed -> identical liability paths
 liab_paths_d1 = simulate_liability_paths(
     fund=liability_fund, entry_policy=entry_policy, dynamics=dynamics,
     mortality=mortality,
@@ -474,16 +445,13 @@ for i, (la, lb) in enumerate(zip(liab_paths_d1, liab_paths_d2)):
     pd.testing.assert_frame_equal(ea, eb)
 print(f"  (d) seed reproducibility OK ({len(liab_paths_d1)} paths identical).")
 
-# (e) Risk additivity: |Var(full) - [Var(assets) + Var(mort_all)]| / Var(full) < 5%
+# (e) risk additivity: residual of Var(full) vs Var(assets) + Var(mort_all) < 5%
 res = attr["additivity_residual"]
 assert res < 0.05, \
     f"(e) additivity residual {res:.2%} > 5% — streams may not be independent"
 print(f"  (e) additivity residual = {res:.4%} < 5% OK.")
 
 
-# =============================================================================
-# 5. PLOTS
-# =============================================================================
 print("\n[5] Plots")
 print("-" * 40)
 
@@ -498,7 +466,6 @@ def _save(fig, name: str) -> None:
     print(f"  Saved: {path}")
 
 
-# --- Plot 1: histograms of all five FR distributions ----------------------
 fig1, ax1 = plt.subplots(figsize=(11, 5))
 colors = {
     "baseline": "#264653",
@@ -522,7 +489,6 @@ ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig1, "v1_fr_distributions_by_config.png")
 
-# --- Plot 2: stacked variance contribution -------------------------------
 fig2, ax2 = plt.subplots(figsize=(7, 5))
 var_retiree_mort = attr["var_mortality_retirees"]
 var_active_mort = max(0.0, attr["var_active_mortality_empirical"])

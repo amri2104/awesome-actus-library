@@ -1,11 +1,4 @@
-"""Stage5a_floaters_quickstart.py
-
-Stage 5a Phase 1 — stochastic ASSET side (floaters) on top of Stage 4:
-  - Stage-4 deterministic liability stream (same fund as Stage 4 example)
-  - mixed asset portfolio: fixed bullet bonds + floating-rate bonds
-  - deterministic baseline: flat IR_SCENARIO at r0, all Stage-4 analyses kept
-  - stochastic block: Hull-White short-rate paths, sticky discount, MC ALM
-"""
+"""Stage 5a phase 1 - stochastic asset side (floaters): deterministic baseline plus Hull-White MC ALM."""
 
 import os
 
@@ -43,9 +36,6 @@ print("=" * 78)
 print("PENSION ALM CASE STUDY — Stage 5a — stochastic asset side (floaters)")
 print("=" * 78)
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side) — same fund as Stage 4 example
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (same fund as Stage 4)")
 print("-" * 40)
 
@@ -143,10 +133,7 @@ dynamics = Stage4Dynamics(
     threshold_index_period=5,
 )
 
-# Generational EK 2001-2005 (1.25%/yr improvement from 2003): lifts ä_x to a
-# realistic level for solvency/funding-ratio valuation (PC values retirees via
-# ä_x). Harmless for liquidity-lens analyses — the headcount decrement is
-# unaffected (no cal_year is passed there).
+# Generational EK 2001-2005: improvement applies to both projected headcounts and the ä_x valuation.
 mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 print(f"  Active cohorts: 8 birth-year buckets, retirement age 65")
@@ -159,9 +146,6 @@ print(f"  Mortality:    EK 2001-2005 period table")
 print(f"  Horizon:      {HORIZON_YEARS} years")
 
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side) — mixed fixed + floating ladder
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets (mixed fixed + floating ladder)")
 print("-" * 40)
 
@@ -244,14 +228,11 @@ print(f"  Asset 1: CHF 160,000,000 fixed PAM, 2.0% coupon, matures 2035")
 print(f"  Asset 2: CHF 100,000,000 fixed PAM, 2.5% coupon, matures 2045")
 print(f"  Asset 3: CHF 100,000,000 floating PAM, +60bp spread, matures 2035")
 print(f"  Asset 4: CHF  40,000,000 floating PAM, +80bp spread, matures 2050")
-print(f"  Total notional: CHF 400,000,000  (50% fixed / 50% floating)")
+print(f"  Total notional: CHF 400,000,000  (65% fixed / 35% floating)")
 
 service = PublicActusService()
 
 
-# =============================================================================
-# 2. EVENT GENERATION — deterministic baseline (flat IR_SCENARIO at r0)
-# =============================================================================
 print("\n[2] Event Generation")
 print("-" * 40)
 
@@ -277,9 +258,6 @@ print(f"  Liability CashFlowStream ready: {len(liability_cfs.events_df)} events"
 cohort_hc_df = pd.DataFrame(simulator.cohort_headcount_log)
 
 
-# =============================================================================
-# 3. DETERMINISTIC ALM — net liquidity + net-CF diagnostic
-# =============================================================================
 print("\n[3] Deterministic ALM (sticky flat discount = technical_rate)")
 print("-" * 40)
 
@@ -301,9 +279,6 @@ print("  Net-CF diagnostic path:")
 print(fr_path.to_string())
 
 
-# =============================================================================
-# 3A-DG. Art. 44 BVV2 funding ratio @ t0 (from fund, not from events)
-# =============================================================================
 print("\n[3A-DG] Funding ratio @ t0 (Art. 44 BVV2)")
 print("-" * 40)
 
@@ -320,9 +295,6 @@ print(f"  Pension capital_t0:                  CHF {PC_check:>15,.2f}")
 print(f"  Funding ratio_t0:                    {dg_t0:>15.2%}")
 
 
-# =============================================================================
-# 3B. Retirement-loss analysis — baseline (5.23% -> 5.10%)
-# =============================================================================
 print("\n[3B] Retirement-loss analysis — baseline (5.23% -> 5.10%)")
 print("-" * 40)
 
@@ -336,9 +308,6 @@ base_total = loss_df["loss_total"].sum()
 print(f"  Σ baseline loss: CHF {base_total:,.2f}")
 
 
-# =============================================================================
-# 3C. Stochastic ALM run (Hull-White) — MC funding-ratio distribution
-# =============================================================================
 print("\n[3C] Stochastic ALM run (Hull-White)")
 print("-" * 40)
 
@@ -372,22 +341,17 @@ for as_of in ("2025-01-01", "2035-01-01"):
     print(f"    ES(worst 5%)={s['fr_es5']:.2%}  P(DG<100%)={s['p_underfunded']:.1%}")
 
 
-# =============================================================================
-# VERIFY — inline asserts
-# =============================================================================
 print("\n[VERIFY] Inline asserts")
 print("-" * 40)
 
-# (a) distribution shape
 dist0 = salm.funding_ratio_distribution("2025-01-01")
 assert dist0.shape == (N_PATHS,), f"(a) shape: {dist0.shape}"
 print(f"  (a) distribution length = {dist0.size} OK.")
 
-# (b) non-degenerate dispersion with sigma>0
 assert np.std(dist0, ddof=1) > 0.0, "(b) zero dispersion with sigma>0"
 print(f"  (b) dispersion > 0 (std={np.std(dist0, ddof=1):.4%}) OK.")
 
-# (c) sigma -> 0 collapses the rate paths (model level, no ACTUS calls)
+# (c) sigma -> 0 collapses the rate paths
 hw_det = create_model("hull_white", r0=0.0176, a=0.15, sigma=1e-12,
                       calibrator=calibrator, seed=SEED)
 sim_det = hw_det.simulate(T=float(HORIZON_YEARS), M=HORIZON_YEARS * 12, I=32)
@@ -395,7 +359,7 @@ assert float(sim_det.std_path()[-1]) < 1e-8, \
     f"(c) sigma->0 not deterministic: {sim_det.std_path()[-1]:.2e}"
 print(f"  (c) sigma->0 collapses paths (terminal std={sim_det.std_path()[-1]:.2e}) OK.")
 
-# (d) reproducibility: same seed -> identical paths (model level, no ACTUS calls)
+# (d) same seed -> identical paths
 hw_a = create_model("hull_white", r0=0.0176, a=0.15, sigma=0.01,
                     calibrator=calibrator, seed=SEED)
 hw_b = create_model("hull_white", r0=0.0176, a=0.15, sigma=0.01,
@@ -405,8 +369,7 @@ rb = hw_b.simulate(T=10.0, M=120, I=64).rates
 assert np.allclose(ra, rb), "(d) seed reproducibility violated"
 print(f"  (d) seed reproducibility OK (max|Δ|={np.max(np.abs(ra - rb)):.2e}).")
 
-# (e) stochastic mean ≈ deterministic baseline @ t0 (sticky discount, small
-# floater fraction → stochastic dispersion centred near the deterministic FR).
+# (e) stochastic mean near deterministic baseline @ t0 (sticky discount, small floater fraction)
 mean_dg = float(np.mean(dist0))
 rel_e = abs(mean_dg - fr_t0_det) / abs(fr_t0_det)
 assert rel_e < 0.20, \
@@ -415,9 +378,6 @@ print(f"  (e) stoch mean ({mean_dg:.2%}) vs det baseline ({fr_t0_det:.2%}) "
       f"rel.diff = {rel_e:.2%} OK.")
 
 
-# =============================================================================
-# 4. PLOTS
-# =============================================================================
 print("\n[4] Plots")
 print("-" * 40)
 
@@ -432,7 +392,6 @@ def _save(fig, name: str) -> None:
     print(f"  Saved: {path}")
 
 
-# --- Plot 1: Net Liquidity (deterministic baseline) ----------------------
 fig1, ax1 = plt.subplots(figsize=(12, 5))
 years = [str(idx.year) for idx in net_table.index]
 x = range(len(years))
@@ -453,7 +412,6 @@ ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig1, "v1_net_liquidity.png")
 
-# --- Plot 2: Cohort headcount decline ------------------------------------
 fig2, ax2 = plt.subplots(figsize=(12, 5))
 colors = {"ACTIVE_1990": "#2a9d8f", "ACTIVE_1970": "#e9c46a", "RETIRED_1955": "#e76f51"}
 for cid in ["ACTIVE_1990", "ACTIVE_1970", "RETIRED_1955"]:
@@ -469,7 +427,6 @@ ax2.legend()
 plt.tight_layout()
 _save(fig2, "v2_cohort_headcount_decline.png")
 
-# --- Plot 3: CR path — applied vs technical ------------------------------
 fig3, ax3 = plt.subplots(figsize=(11, 5))
 plot_df = loss_df.sort_values("year")
 ax3.plot(plot_df["year"], plot_df["applied_uws"] * 100,
@@ -486,7 +443,6 @@ ax3.legend()
 plt.tight_layout()
 _save(fig3, "v3_uws_path.png")
 
-# --- Plot 4: Retirement loss per year ------------------------------------
 fig4, ax4 = plt.subplots(figsize=(11, 5))
 agg = (loss_df.groupby("year")["loss_total"].sum()
        .sort_index())
@@ -499,7 +455,6 @@ ax4.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig4, "v4_retirement_loss_per_year.png")
 
-# --- Plot 5: Stochastic funding-ratio distribution @ t0 ------------------
 fig5, ax5 = plt.subplots(figsize=(10, 5))
 ax5.hist(dist0 * 100, bins=30, color="#2a9d8f", edgecolor="black", alpha=0.8)
 ax5.axvline(100, color="red", linestyle="--", linewidth=1.2, label="100% coverage")
@@ -513,7 +468,6 @@ ax5.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig5, "v5_stoch_fr_hist_t0.png")
 
-# --- Plot 6: Stochastic funding-ratio fan chart over time ----------------
 fan_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
 fan = salm.fan_chart_data(fan_dates)
 

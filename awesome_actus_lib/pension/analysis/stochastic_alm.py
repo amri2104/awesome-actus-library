@@ -68,7 +68,7 @@ class StochasticALMAnalysis:
 
         self._sim = None
         self._sim_equity = None
-        self._asset_cfs: List = []  # one CashFlowStream per path
+        self._asset_cfs: List = []
         self._ran = False
 
 
@@ -77,7 +77,6 @@ class StochasticALMAnalysis:
         T = self.horizon_years
         M = int(round(T * self.steps_per_year))
 
-        # 1. Simulate interest rates
         params = dict(self.model_params)
         if "r0" not in params:
             raise ValueError("model_params must include 'r0' (initial short rate).")
@@ -87,7 +86,6 @@ class StochasticALMAnalysis:
         model = create_model(self.model, seed=self.seed, **params)
         self._sim = model.simulate(T=T, M=M, I=self.n_paths)
 
-        # 2. Simulate equities if params provided (independent but reproducible seed)
         if self.equity_params:
             from awesome_actus_lib.stochastic_rates.models.gbm import GBMModel
             S0 = self.equity_params.get("S0", 100.0)
@@ -175,8 +173,8 @@ class StochasticALMAnalysis:
             "min": float(np.min(dist)),
             "max": float(np.max(dist)),
             "fr_p5": p5,                                      # 95% VaR-level floor
-            "fr_es5": float(np.mean(dist[dist <= p5])),       # expected shortfall
-            "p_underfunded": float(np.mean(dist < 1.0)),      # P(FR < 100%)
+            "fr_es5": float(np.mean(dist[dist <= p5])),       # expected shortfall below p5
+            "p_underfunded": float(np.mean(dist < 1.0)),      # P(funding ratio < 100%)
         }
 
     def fan_chart_data(

@@ -58,7 +58,6 @@ def _build_headcount_trace(
         cid = entry["cohort_id"]
         year = int(entry["year"])
         if cid not in cohort_meta:
-            # New entrant
             try:
                 _, entry_year_str, age_token = cid.split("_")
                 entry_year = int(entry_year_str)

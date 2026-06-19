@@ -1,10 +1,4 @@
-"""Stage5a_Phase2_multi_asset_quickstart.py
-
-Stage 5a Phase 2 — multi-asset allocation on top of Stage 5a Phase 1:
-  - Diversified asset portfolio (70% ACTUS bonds + cash, 30% equity sleeve MTM)
-  - Stochastic block: Hull-White short-rate (ACTUS) + GBM equity paths
-  - Solvency funding ratio distribution with tail-risk metrics (VaR, ES)
-"""
+"""Stage 5a phase 2 - multi-asset allocation: Hull-White rates plus GBM equity, solvency funding ratio with tail-risk metrics."""
 
 import os
 import numpy as np
@@ -39,9 +33,6 @@ print("=" * 78)
 print("PENSION ALM CASE STUDY — Stage 5a Phase 2 — multi-asset (Bonds + Equity MTM + Cash)")
 print("=" * 78)
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side) — same fund as Stage 4/5a
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (same fund as Stage 4/5a)")
 print("-" * 40)
 
@@ -138,10 +129,7 @@ dynamics = Stage4Dynamics(
     conversion_rate_path={2025: 0.0523, 2029: 0.0510},
     threshold_index_period=5,
 )
-# Generational EK 2001-2005 (1.25%/yr improvement from 2003): lifts ä_x to a
-# realistic level for solvency/funding-ratio valuation (PC values retirees via
-# ä_x). Harmless for liquidity-lens analyses — the headcount decrement is
-# unaffected (no cal_year is passed there).
+# Generational EK 2001-2005: improvement applies to both projected headcounts and the ä_x valuation.
 mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 simulator = DynamicFundSimulator(
@@ -153,9 +141,6 @@ simulator = DynamicFundSimulator(
 liability_cfs = simulator.run(horizon_years=HORIZON_YEARS)
 print(f"  Liabilities ready: {len(liability_cfs.events_df)} events")
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side) — Diversified Portfolio (50% Bonds / 30% Equities / 20% Cash)
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets (diversified bonds + equity sleeve + cash)")
 print("-" * 40)
 
@@ -219,7 +204,7 @@ asset_portfolio = Portfolio([
     )
 ])
 
-# Equity sleeve runs OUTSIDE ACTUS (mark-to-market revaluation via GBM).
+# Equity sleeve runs outside ACTUS (mark-to-market revaluation via GBM).
 EQUITY_SLEEVE_0 = 120_000_000.0
 BOND_BOOK = 200_000_000.0
 CASH_BOOK = 80_000_000.0
@@ -233,23 +218,18 @@ print(f"  Equity Sleeve (Runs outside ACTUS):")
 print(f"    - Equities (MTM): CHF 120,000,000 (30%)")
 print(f"  Total Portfolio Value @ t0: CHF 400,000,000 (100%)")
 
-# =============================================================================
-# 2. CALIBRATION & MONTE CARLO SETUP
-# =============================================================================
 print("\n[2] Calibration & Monte Carlo Setup (Hull-White + GBM)")
 print("-" * 40)
 
-# Calibrate initial yield curve
 curve_tenors = np.array([1, 2, 3, 4, 5, 7, 10], dtype=float)
 curve_rates = np.array([0.014, 0.015, 0.016, 0.017, 0.0176, 0.019, 0.021], dtype=float)
 calibrator = CurveCalibrator.from_market(times=curve_tenors, spot_rates=curve_rates)
 
-# Setup joint stochastic analysis (HW for rates, GBM for equity)
 salm = StochasticALMAnalysis(
     asset_portfolio=asset_portfolio,
     liabilities_cf=liability_cfs,
     calibrator=calibrator,
-    technical_rate=policy.technical_rate,  # sticky technical rate
+    technical_rate=policy.technical_rate,
     model="hull_white",
     model_params={"r0": 0.0176, "a": 0.15, "sigma": 0.01},
     equity_params={"S0": 100.0, "mu": 0.05, "sigma": 0.15},  # GBM equities (5% return, 15% volatility)
@@ -265,7 +245,6 @@ print(f"  Simulating {N_PATHS} paths over {HORIZON_YEARS} years...")
 salm.run()
 print("  Monte Carlo simulation complete!")
 
-# Initialize the new Stochastic Solvency Funding-Ratio Analysis
 sfra = StochasticFundingRatioAnalysis(
     salm=salm,
     fund=liability_fund,
@@ -275,27 +254,21 @@ sfra = StochasticFundingRatioAnalysis(
     equity_sleeve_0=EQUITY_SLEEVE_0,
 )
 
-# Initialize standard ALM analysis (for comparing the two metrics)
 alm_det = ALMAnalysis(
     assets_cf=salm._asset_cfs[0],
     liabilities_cf=liability_cfs,
     flat_rate=policy.technical_rate,
 )
 
-# =============================================================================
-# 3. COMPARISON OF TWO METRICS (LIQUIDITY vs SOLVENCY)
-# =============================================================================
 print("\n[3] Comparison of the Two Metrics (Liquidity net-CF vs Solvency DG)")
 print("-" * 40)
 
 PC_t0 = sfra.pension_capital_t0
 print(f"  Pension capital (PC) @ t0 (deterministic): CHF {PC_t0:,.2f}")
 
-# Metric 1: Deterministic net-CF diagnostic (Liquidity View)
 fr_t0_det = alm_det.funding_ratio(as_of=START_DATE)
 print(f"  1. Net-CF funding_ratio (Liquidity View) @ t0:  {fr_t0_det:.2%} (Generic Cashflow NPV)")
 
-# Metric 2: Stochastic solvency funding ratio (solvency view)
 dg_t0_det = sfra.funding_ratio_distribution(as_of=START_DATE)[0]
 print(f"  2. Solvency funding ratio (solvency view) @ t0: {dg_t0_det:.2%} (Art. 44 BVV2)")
 
@@ -309,13 +282,10 @@ for valuation_date in ("2025-01-01", "2035-01-01", "2045-01-01"):
     print(f"    Expected Shortfall:   {summary['fr_es5']:.2%}")
     print(f"    Deficit Probability:  {summary['p_underfunded']:.1%}")
 
-# =============================================================================
-# 4. MANDATORY VERIFICATION TESTS
-# =============================================================================
 print("\n[VERIFY] Inline asserts")
 print("-" * 40)
 
-# A. Falsification Assert: sigma = 0.0 must yield degenerate distribution (std < 1e-6)
+# (a) zero equity volatility must give a near-degenerate distribution
 print("  Running Falsification Test (sigma=0.0)...")
 salm_degenerate = StochasticALMAnalysis(
     asset_portfolio=asset_portfolio,
@@ -324,7 +294,7 @@ salm_degenerate = StochasticALMAnalysis(
     technical_rate=policy.technical_rate,
     model="hull_white",
     model_params={"r0": 0.0176, "a": 0.15, "sigma": 0.01},
-    equity_params={"S0": 100.0, "mu": 0.05, "sigma": 0.0},  # ZERO VOLATILITY
+    equity_params={"S0": 100.0, "mu": 0.05, "sigma": 0.0},
     n_paths=N_PATHS,
     horizon_years=HORIZON_YEARS,
     steps_per_year=12,
@@ -354,7 +324,7 @@ print(f"    - Active (sigma=0.15) std:     {std_active:.4f}")
 assert std_active > 0.001, f"Falsification: active std should be positive ({std_active:.4f})"
 print("    => Assert [a] (Degenerate vs Active dispersion) OK.")
 
-# B. Equity Sensitivity: DG mean must increase monotonically with equity_sleeve_0
+# (b) DG mean must increase with equity_sleeve_0
 print("  Running Equity Sensitivity Test...")
 sfra_more_equity = StochasticFundingRatioAnalysis(
     salm=salm,
@@ -362,7 +332,7 @@ sfra_more_equity = StochasticFundingRatioAnalysis(
     mortality=mortality,
     bond_book=BOND_BOOK,
     cash_book=CASH_BOOK,
-    equity_sleeve_0=EQUITY_SLEEVE_0 + 50_000_000.0,  # Increase equity sleeve
+    equity_sleeve_0=EQUITY_SLEEVE_0 + 50_000_000.0,
 )
 mean_original = np.mean(sfra.funding_ratio_distribution("2035-01-01"))
 mean_more_equity = np.mean(sfra_more_equity.funding_ratio_distribution("2035-01-01"))
@@ -371,7 +341,7 @@ print(f"    - Mean with CHF 170M equity: {mean_more_equity:.4f}")
 assert mean_more_equity > mean_original, "Sensitivity: larger equity sleeve did not increase mean DG"
 print("    => Assert [b] (Equity sensitivity) OK.")
 
-# C. GBM Convergence: E[S_T] ≈ S0 * exp(mu * T)
+# (c) GBM convergence: E[S_T] ~ S0 * exp(mu * T)
 print("  Running GBM Convergence Test...")
 sim_eq = salm.equity_simulation
 S0 = sim_eq.rates[0, 0]
@@ -386,7 +356,7 @@ max_margin = 0.50 if N_PATHS < 100 else 0.15
 assert rel_diff < max_margin, f"GBM Convergence: actual E[S_T] diverges too much ({rel_diff:.2%})"
 print("    => Assert [c] (GBM convergence) OK.")
 
-# D. Reproducibility: same seed -> identical equity paths
+# (d) same seed -> identical equity paths
 print("  Running Reproducibility Test...")
 gbm_a = GBMModel(
     S0=100.0,
@@ -405,9 +375,6 @@ sim_b = gbm_b.simulate(T=10.0, M=120, I=64)
 assert np.allclose(sim_a.rates, sim_b.rates), "Reproducibility: paths under same seed differ"
 print("    => Assert [d] (Seed reproducibility) OK.")
 
-# =============================================================================
-# 5. VISUALIZATION
-# =============================================================================
 print("\n[4] Plots")
 print("-" * 40)
 
@@ -420,7 +387,6 @@ def _save(fig, name: str) -> None:
     fig.savefig(path, dpi=150, bbox_inches="tight")
     print(f"  Saved plot: {path}")
 
-# --- Plot 1: Equity Price Paths (GBM) ---
 fig1, ax1 = plt.subplots(figsize=(11, 5))
 times = salm.equity_simulation.times
 prices = salm.equity_simulation.rates
@@ -436,7 +402,6 @@ ax1.grid(True, linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig1, "v1_equity_paths_gbm.png")
 
-# --- Plot 2: Stochastic Solvency Funding-Ratio Distribution @ t10 ---
 fig2, ax2 = plt.subplots(figsize=(10, 5))
 dist10 = sfra.funding_ratio_distribution("2035-01-01")
 mean10 = np.mean(dist10)
@@ -453,7 +418,6 @@ ax2.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig2, "v2_stoch_fr_hist_t10.png")
 
-# --- Plot 3: Quantile Fan Chart over Horizon ---
 fan_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
 fan = sfra.fan_chart_data(fan_dates)
 

@@ -1,4 +1,4 @@
-"""Stage 1 — closed fund simulator."""
+"""Closed fund simulator (no new entrants)."""
 
 from copy import deepcopy
 from datetime import date
@@ -60,7 +60,7 @@ class ClosedFundSimulator:
                     sink=per_contract_events[cohort.cohort_id],
                     policy=policy,
                 )
-                self._apply_mortality(cohort, age)
+                self._apply_mortality(cohort, age, sim_year)
                 self.cohort_headcount_log.append({
                     "year": sim_year,
                     "cohort_id": cohort.cohort_id,
@@ -89,17 +89,17 @@ class ClosedFundSimulator:
         self._cohort_rngs[cohort_id] = child
         return child
 
-    def _apply_mortality(self, cohort: Cohort, age: int) -> None:
+    def _apply_mortality(self, cohort: Cohort, age: int, cal_year: Optional[int] = None) -> None:
         if self.mortality is None:
             return
-        p = self.mortality.survival_probability(age, cohort.gender)
+        p = self.mortality.survival_probability(age, cohort.gender, cal_year)
         if not self.stochastic_mortality:
-            # Deterministic Stage-3 behaviour: retirees only, fractional decay.
+            # Deterministic decrement: retirees only, fractional survival.
             if cohort.status != "retired":
                 return
             cohort.headcount = cohort.headcount * p
             return
-        # Stochastic Stage-5b behaviour: binomial cohort transition.
+        # Stochastic decrement: binomial cohort transition.
         if self.mortality_filter == "retirees" and cohort.status != "retired":
             return
         hc = int(round(cohort.headcount))

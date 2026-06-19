@@ -1,10 +1,4 @@
-"""Stage5c_forward_funding_ratio_quickstart.py
-
-Stage 5c — forward stochastic solvency funding ratio (Art. 44 BVV2) on top of Stage 5b:
-  - Stage-4 deterministic liability backbone + stochastic mortality paths
-  - Stochastic ASSET side: StochasticALMAnalysis (Hull-White + GBM equity)
-  - Forward solvency funding ratio: PC_t,i and V_t,i coupled per path via LiabilityPath
-"""
+"""Stage 5c - forward stochastic solvency funding ratio (Art. 44 BVV2): PC and asset value coupled per path via LiabilityPath."""
 
 import os
 
@@ -43,9 +37,6 @@ print("PENSION ALM CASE STUDY — Stage 5c — forward stochastic solvency fundi
 print("=" * 78)
 
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side)
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities")
 print("-" * 40)
 
@@ -102,16 +93,11 @@ dynamics = Stage4Dynamics(
     conversion_rate_path={2025: 0.0523, 2029: 0.0510},
     threshold_index_period=5,
 )
-# Generational EK 2001-2005 (1.25%/yr improvement from 2003): lifts ä_x to a
-# realistic level. This is the analysis where it matters most — the forward
-# PC_t,i values retired survivors via ä_x at each horizon date.
+# Generational EK 2001-2005: forward PC values retired survivors via ä_x at each horizon date.
 mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 print(f"  3 active cohorts + 1 retired cohort, EntryPolicy 15/y, EK 2001-2005 (generational)")
 
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side) — small mix: one fixed bond + one cash account
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets (mixed fixed + cash, small for speed)")
 print("-" * 40)
 
@@ -163,9 +149,6 @@ print(f"  Cash  (book) : CHF {CASH_BOOK:>15,.0f}")
 print(f"  Equity (MTM) : CHF {EQUITY_SLEEVE_0:>15,.0f}")
 
 
-# =============================================================================
-# 2. CURVE CALIBRATION
-# =============================================================================
 print("\n[2] Curve calibration")
 print("-" * 40)
 curve_tenors = np.array([1, 2, 3, 4, 5, 7, 10], dtype=float)
@@ -173,9 +156,6 @@ curve_rates = np.array([0.014, 0.015, 0.016, 0.017, 0.0176, 0.019, 0.021], dtype
 calibrator = CurveCalibrator.from_market(times=curve_tenors, spot_rates=curve_rates)
 
 
-# =============================================================================
-# 3. STOCHASTIC LIABILITY PATHS (with headcount trace)
-# =============================================================================
 print(f"\n[3] Liability paths (n={N_PATHS}, stochastic mortality, headcount trace ON)")
 print("-" * 40)
 liab_paths = simulate_liability_paths(
@@ -193,14 +173,11 @@ print(f"  Built {len(liab_paths)} LiabilityPath objects, "
       f"trace[0] has {len(liab_paths[0].headcount_trace)} (year,cohort) rows.")
 
 
-# =============================================================================
-# 4A. STOCHASTIC ASSETS (HW + GBM)
-# =============================================================================
 print(f"\n[4A] StochasticALM run (Hull-White + GBM, n={N_PATHS})")
 print("-" * 40)
 salm = StochasticALMAnalysis(
     asset_portfolio=asset_portfolio,
-    liabilities_cf=liab_paths[0].cashflows,  # not used by Stage 5c, but required.
+    liabilities_cf=liab_paths[0].cashflows,  # required by the constructor, not used here
     calibrator=calibrator,
     technical_rate=policy.technical_rate,
     model="hull_white",
@@ -228,9 +205,6 @@ sfra = StochasticFundingRatioAnalysis(
 )
 
 
-# =============================================================================
-# 4B. DETERMINISTIC ASSETS (sigma=0) — for the "gap closed" assert
-# =============================================================================
 print(f"\n[4B] Deterministic-assets twin (sigma_HW=0, sigma_eq=0, n={N_PATHS})")
 print("-" * 40)
 salm_det = StochasticALMAnalysis(
@@ -262,13 +236,10 @@ sfra_det_assets = StochasticFundingRatioAnalysis(
 print("  Done.")
 
 
-# =============================================================================
-# 5. VERIFY — three inline asserts
-# =============================================================================
 print("\n[VERIFY] Inline asserts")
 print("-" * 40)
 
-# ---- (a) t0 collapse --------------------------------------------------------
+# (a) t0 collapse: forward surface reduces to the deterministic t0 snapshot
 dga_t0 = FundingRatioAnalysis(
     fund=liability_fund,
     mortality=mortality,
@@ -288,7 +259,7 @@ assert std_fwd_t0 < 1e-9, (
 )
 print("      => Assert (a) OK — forward surface collapses to t0 snapshot.")
 
-# ---- (b) gap closed: variance > 0 with deterministic assets ----------------
+# (b) with deterministic assets, stochastic mortality alone gives variance > 0
 as_of_b = f"{START_YEAR + 10}-01-01"
 fwd_det = sfra_det_assets.funding_ratio_distribution(as_of_b)
 var_det = float(np.var(fwd_det, ddof=1))
@@ -302,16 +273,16 @@ assert var_det > 1e-10, (
 )
 print("      => Assert (b) OK — solvency funding ratio now responds to longevity risk.")
 
-# ---- (c) coupling: high-mortality vs low-mortality path --------------------
+# (c) coupling: same survivor path drives both PC and pension outflows
 as_of_c = f"{START_YEAR + HORIZON_YEARS - 1}-01-01"
-# Order paths by surviving retirees at end-of-horizon (lower = more deaths).
+# Rank paths by surviving retirees at end-of-horizon (lower = more deaths).
 surviving_retirees = np.array([
     sum(r["headcount"] for r in lp.headcount_trace
         if r["year"] == START_YEAR + HORIZON_YEARS - 1 and r["status"] == "retired")
     for lp in liab_paths
 ])
-idx_high_mort = int(np.argmin(surviving_retirees))   # most deaths
-idx_low_mort = int(np.argmax(surviving_retirees))    # fewest deaths
+idx_high_mort = int(np.argmin(surviving_retirees))
+idx_low_mort = int(np.argmax(surviving_retirees))
 
 pc_high = sfra._path_PC(as_of_c, idx_high_mort)
 pc_low = sfra._path_PC(as_of_c, idx_low_mort)
@@ -323,7 +294,7 @@ def _cum_pension_outflow(lp, end_year: int) -> float:
         return 0.0
     end_ts = pd.to_datetime(f"{end_year}-12-31")
     mask = (df["type"] == "PENSION_PAYMENT") & (pd.to_datetime(df["time"]) <= end_ts)
-    return float(df.loc[mask, "payoff"].sum())  # negative number
+    return float(df.loc[mask, "payoff"].sum())
 
 
 pen_high = _cum_pension_outflow(liab_paths[idx_high_mort], START_YEAR + HORIZON_YEARS - 1)
@@ -339,7 +310,7 @@ assert pc_high < pc_low, (
     f"(c) coupling: PC on high-mortality path ({pc_high:,.0f}) should be smaller "
     f"than on low-mortality path ({pc_low:,.0f})."
 )
-# Outflows are negative; smaller magnitude on high-mort means pen_high > pen_low.
+# Outflows are negative, so smaller magnitude on the high-mortality path means pen_high > pen_low.
 assert pen_high > pen_low, (
     f"(c) coupling: cumulative pension outflow magnitude on high-mort path "
     f"should be smaller (|{pen_high:,.0f}| < |{pen_low:,.0f}|)."
@@ -347,9 +318,6 @@ assert pen_high > pen_low, (
 print("      => Assert (c) OK — same survivor path drives PC and pension outflows.")
 
 
-# =============================================================================
-# 5. PLOTS
-# =============================================================================
 print("\n[5] Plots")
 print("-" * 40)
 

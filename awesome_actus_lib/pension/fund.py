@@ -44,8 +44,6 @@ class PensionFund:
                 f"Cohort {cohort.cohort_id!r}: age {age} at start_date is >= "
                 f"terminal_age {self.policy.terminal_age}; cohort would emit no events"
             )
-        # Active cohorts with age >= retirement_age are the legitimate
-        # auto-conversion path (e.g. ACTIVE_1955 at age 70). Do NOT warn.
         if cohort.status == "retired" and age < self.policy.retirement_age:
             warnings.warn(
                 f"Cohort {cohort.cohort_id!r}: status='retired' at age {age} is below "

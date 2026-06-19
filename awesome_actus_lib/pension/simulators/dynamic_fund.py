@@ -56,9 +56,7 @@ class DynamicFundSimulator(OpenFundSimulator):
 
         grown_salary = cohort.gross_salary * salary_factor
 
-        # Inline insured-salary computation against indexed thresholds.
-        # policy.insured_salary would use the fixed thresholds and is therefore
-        # not reusable here.
+        # Insured salary against indexed thresholds (policy.insured_salary uses fixed ones).
         min_sal = policy.bvg_min_salary * threshold_factor
         max_sal = policy.bvg_max_salary * threshold_factor
         coord = policy.coordination_deduction * threshold_factor

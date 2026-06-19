@@ -46,7 +46,7 @@ class MortalityTable:
         q_col: str = "qx",
     ) -> "MortalityTable":
 
-        import pandas as pd  # lazy
+        import pandas as pd
 
         if unisex_sheet is not None:
             if male_sheet is not None or female_sheet is not None:
@@ -97,7 +97,7 @@ class MortalityTable:
         female_value: str = "f",
     ) -> "MortalityTable":
 
-        import pandas as pd  # lazy
+        import pandas as pd
 
         df = pd.read_csv(path)
         _require_columns(df, [age_col, q_col] + ([gender_col] if gender_col else []))
@@ -165,7 +165,7 @@ def _read_excel_qx(pd, path, sheet: str, age_col: str, q_col: str) -> Dict[int, 
                 age_col,
                 q_col,
             )
-        _require_columns(df, [age_col, q_col])  # will raise with clear error
+        _require_columns(df, [age_col, q_col])
     return _df_to_qx_dict(df, age_col, q_col)
 
 

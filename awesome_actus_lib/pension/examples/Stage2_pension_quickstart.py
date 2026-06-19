@@ -1,10 +1,4 @@
-"""Stage2_pension_quickstart.py
-
-Stage 2 — open fund with deterministic new entrants:
-  - EntryPolicy (single entrant archetype per year)
-  - OpenFundSimulator (subclass of ClosedFundSimulator)
-  - headcount_log diagnostic (per-year active/retired totals)
-"""
+"""Stage 2 open fund with deterministic new entrants: EntryPolicy, OpenFundSimulator, headcount_log."""
 
 import os
 
@@ -30,9 +24,6 @@ print("=" * 78)
 print("PENSION ALM CASE STUDY — Stage 2 — open fund with deterministic entrants")
 print("=" * 78)
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side) — Stage 2: open fund
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (open fund)")
 print("-" * 40)
 
@@ -64,7 +55,6 @@ liability_fund.add_cohort(Cohort(
     accrued_savings=600_000.0,
 ))
 
-# Stage 2 addition: deterministic annual new entrants
 entry_policy = EntryPolicy(
     entry_age=25,
     headcount=20,
@@ -78,9 +68,6 @@ print(f"  Total starting members: 430")
 print(f"  Entry policy: 20 new members/year, age 25, gross salary CHF 80,000")
 
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side)
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets")
 print("-" * 40)
 
@@ -140,9 +127,6 @@ print(f"  Total notional: CHF 100,000,000")
 service = PublicActusService()
 
 
-# =============================================================================
-# 2. EVENT GENERATION
-# =============================================================================
 print("\n[2] Event Generation")
 print("-" * 40)
 
@@ -153,16 +137,12 @@ simulator = OpenFundSimulator(liability_fund, entry_policy)
 liability_cfs = simulator.run(horizon_years=HORIZON_YEARS)
 print(f"  Liability CashFlowStream ready: {len(liability_cfs.events_df)} events")
 
-# Stage 2 extra: headcount evolution log
 headcount_df = pd.DataFrame(simulator.headcount_log)
 print(f"  Headcount @ year 1 :  active={headcount_df.iloc[0]['active']:>4}, "
       f"retired={headcount_df.iloc[0]['retired']:>4}")
 print(f"  Headcount @ year 40:  active={headcount_df.iloc[-1]['active']:>4}, "
       f"retired={headcount_df.iloc[-1]['retired']:>4}")
 
-# =============================================================================
-# 3. MERGING ASSETS AND LIABILITIES
-# =============================================================================
 print("\n[3] Merging assets and liabilities")
 print("-" * 40)
 
@@ -175,12 +155,10 @@ alm = ALMAnalysis(
     flat_rate=policy.technical_rate,
 )
 
-# --- Variant 1: net liquidity per year ------------------------------------
 net_table = alm.net_liquidity(freq="YE")
 print("\n  Variant 1 — Net Liquidity (year-end, first 5 rows):")
 print(net_table.head().to_string())
 
-# --- Variant 2: funding ratio (PV comparison) -----------------------------
 fr_t0 = alm.funding_ratio(as_of="2025-01-01")
 print(f"\n  Variant 2 — Funding Ratio @ 2025-01-01: {fr_t0:.2%}")
 
@@ -188,7 +166,6 @@ fr_path = alm.funding_ratio_path(["2025-01-01", "2030-01-01", "2035-01-01"])
 print("  Funding Ratio path:")
 print(fr_path.to_string())
 
-# --- Variant 3: combined CashFlowStream ----------------------------------
 def _df_to_raw_response(events_df):
     raw = []
     for cid, grp in events_df.groupby("contractId"):
@@ -218,9 +195,6 @@ print(f"\n  Variant 3 — Combined CashFlowStream: {len(combined_cfs.events_df)}
       f"across {len(combined_cfs.portfolio)} contracts/cohorts")
 
 
-# =============================================================================
-# 4. PLOTS
-# =============================================================================
 print("\n[4] Plots")
 print("-" * 40)
 
@@ -237,7 +211,6 @@ def _save(fig, name: str) -> None:
     print(f"  Saved: {path}")
 
 
-# --- Plot 1: Net Liquidity (Variant 1) -----------------------------------
 fig1, ax1 = plt.subplots(figsize=(12, 5))
 years = [str(idx.year) for idx in net_table.index]
 x = range(len(years))
@@ -258,7 +231,6 @@ ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig1, "v1_net_liquidity.png")
 
-# --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
 fr_series = alm.funding_ratio_path(fr_dates)
 
@@ -273,13 +245,11 @@ ax2.legend()
 plt.tight_layout()
 _save(fig2, "v2_funding_ratio_path.png")
 
-# --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
 fig3 = combined_cfs.plot(title="Stage 2 — Combined Asset + Liability Cashflows",
                          return_fig=True)
 if fig3 is not None:
     _save(fig3, "v3_combined_cashflows.png")
 
-# --- Plot 4 (Stage 2 specific): Headcount evolution ----------------------
 fig4, ax4 = plt.subplots(figsize=(12, 5))
 ax4.plot(headcount_df["year"], headcount_df["active"], marker="o",
          label="Active", color="#2a9d8f")

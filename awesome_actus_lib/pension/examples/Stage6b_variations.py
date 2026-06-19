@@ -1,14 +1,6 @@
-"""Stage6_variations.py — Stage 6 sensitivities (variations).
-
-Kleiner Lauf (N_PATHS=60) ueber zwei Hebel der Stage-5d-Engine, nur ueber
-die bestehende oeffentliche API (keine Klassenaenderungen):
-
-  - equity_sigma in {0.05, 0.10, 0.15}     — nur Szenario B (Fix-Mix 40/60)
-  - sanierung.trigger_dg in {0.95, 1.00}   — nur Szenario D (B + Sanierung)
-
-Setup (Bestand, Kalibrierung DG_t0=107.6%, Seeds 42/4242/777, Kurve,
-Hull-White+GBM) ist 1:1 der des Stage6_going_concern_quickstart, nur mit
-60 Pfaden. Output -> output/stage_6/sensitivitaeten.md.
+"""Stage 6 sensitivity variations over two going-concern levers:
+equity_sigma (scenario B) and sanierung.trigger_dg (scenario D).
+Same setup as the Stage 6 quickstart, with 60 paths.
 """
 
 import os
@@ -53,13 +45,10 @@ OUT_DIR = os.path.join(_REPO, "output", "stage_6")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 print("=" * 78)
-print(f"STAGE 6 — Sensitivitaeten (N_PATHS={N_PATHS})")
+print(f"STAGE 6 - sensitivities (N_PATHS={N_PATHS})")
 print("=" * 78)
 
 
-# =============================================================================
-# Setup — identisch zum Stage6_going_concern_quickstart (nur N_PATHS=60)
-# =============================================================================
 policy = PensionPolicy()
 liability_fund = PensionFund(policy=policy, start_date=START_DATE)
 for c in (
@@ -132,7 +121,7 @@ calibrator = CurveCalibrator.from_market(
                         dtype=float),
 )
 
-print(f"[Setup] Liability-Pfade (n={N_PATHS}) ...")
+print(f"[Setup] Liability paths (n={N_PATHS}) ...")
 liab_paths = simulate_liability_paths(
     fund=liability_fund, entry_policy=entry_policy, dynamics=dynamics,
     mortality=mortality, horizon_years=HORIZON_YEARS, n_paths=N_PATHS,
@@ -172,10 +161,8 @@ def _kpis(scen):
             float(np.mean(dist < 1.0)))
 
 
-# =============================================================================
-# Variation 1 — equity_sigma, Szenario B (Fix-Mix 40/60)
-# =============================================================================
-print("\n[Var 1] equity_sigma — Szenario B")
+# Variation 1: equity_sigma, scenario B (fixed-mix 40/60)
+print("\n[Var 1] equity_sigma - scenario B")
 rows_sigma = []
 for sig in EQ_SIGMA_GRID:
     scen = GoingConcernFundingRatioAnalysis(
@@ -189,10 +176,8 @@ for sig in EQ_SIGMA_GRID:
     print(f"  equity_sigma={sig:.2f}: mean={m:7.2%}  p5={p5:7.2%}  "
           f"P(DG<1)={pu:6.1%}")
 
-# =============================================================================
-# Variation 2 — sanierung.trigger_dg, Szenario D (B + Sanierung)
-# =============================================================================
-print("\n[Var 2] trigger_dg — Szenario D")
+# Variation 2: sanierung.trigger_dg, scenario D (B + recovery contribution)
+print("\n[Var 2] trigger_dg - scenario D")
 rows_trigger = []
 for trig in TRIGGER_GRID:
     scen = GoingConcernFundingRatioAnalysis(
@@ -208,36 +193,34 @@ for trig in TRIGGER_GRID:
     print(f"  trigger_dg={trig:.2f}: mean={m:7.2%}  p5={p5:7.2%}  "
           f"P(DG<1)={pu:6.1%}")
 
-# =============================================================================
-# Output — sensitivitaeten.md
-# =============================================================================
+# Write the sensitivities markdown table.
 lines = []
-lines.append("# Stage 6 — Sensitivitaeten\n")
-lines.append(f"- Skript: `examples/Stage6_variations.py`, "
-             f"**N_PATHS = {N_PATHS}**, Horizont {HORIZON_YEARS} Jahre, "
-             f"KPIs am {D_T}")
-lines.append(f"- Setup identisch zum Quickstart (Seeds {SEED_ASSETS}/"
-             f"{SEED_LIAB}/{SEED_EQ}, DG_t0 = 107.6%), nur bestehende "
-             f"oeffentliche API")
-lines.append("- Achtung: kleinerer Lauf als der kanonische 200er — Zahlen "
-             "sind nicht 1:1 mit `summary_kpis.md` vergleichbar\n")
+lines.append("# Stage 6 - sensitivities\n")
+lines.append(f"- Script: `examples/Stage6_variations.py`, "
+             f"**N_PATHS = {N_PATHS}**, horizon {HORIZON_YEARS} years, "
+             f"KPIs at {D_T}")
+lines.append(f"- Setup identical to the quickstart (seeds {SEED_ASSETS}/"
+             f"{SEED_LIAB}/{SEED_EQ}, DG_t0 = 107.6%), existing "
+             f"public API only")
+lines.append("- Note: smaller run than the canonical 200 - numbers "
+             "are not 1:1 comparable with `summary_kpis.md`\n")
 
-lines.append("## equity_sigma — Szenario B (Fix-Mix 40/60)\n")
+lines.append("## equity_sigma - scenario B (fixed-mix 40/60)\n")
 lines.append("| equity_sigma | mean DG | p5 | P(DG<100%) |")
 lines.append("|---|---:|---:|---:|")
 for sig, m, p5, pu in rows_sigma:
-    base = "  *(Basisfall B)*" if abs(sig - 0.10) < 1e-12 else ""
+    base = "  *(base case B)*" if abs(sig - 0.10) < 1e-12 else ""
     lines.append(f"| {sig:.2f}{base} | {m:.1%} | {p5:.1%} | {pu:.1%} |")
 
-lines.append("\n## sanierung.trigger_dg — Szenario D (B + Sanierung, "
+lines.append("\n## sanierung.trigger_dg - scenario D (B + recovery, "
              "sb_factor=0.5)\n")
 lines.append("| trigger_dg | mean DG | p5 | P(DG<100%) |")
 lines.append("|---|---:|---:|---:|")
 for trig, m, p5, pu in rows_trigger:
-    base = "  *(Basisfall D)*" if abs(trig - 1.00) < 1e-12 else ""
+    base = "  *(base case D)*" if abs(trig - 1.00) < 1e-12 else ""
     lines.append(f"| {trig:.2f}{base} | {m:.1%} | {p5:.1%} | {pu:.1%} |")
 
-_path = os.path.join(OUT_DIR, "sensitivitaeten.md")
+_path = os.path.join(OUT_DIR, "sensitivities.md")
 with open(_path, "w") as fh:
     fh.write("\n".join(lines) + "\n")
-print(f"\n[Block 5] Saved: {_path}")
+print(f"\nSaved: {_path}")

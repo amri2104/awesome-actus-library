@@ -39,7 +39,7 @@ standard for Swiss pension-fund ALM.
 
 - `awesome_actus_lib/pension/examples/Stage4_pension_quickstart.py`
 - `awesome_actus_lib/pension/examples/Stage5c_forward_funding_ratio_quickstart.py`
-- `awesome_actus_lib/pension/examples/Stage6_going_concern_quickstart.py`
+- `awesome_actus_lib/pension/examples/Stage6a_going_concern_quickstart.py`
 
 ## Install
 
@@ -50,7 +50,7 @@ pip install awesome-actus-lib
 For local thesis runs from the repository root:
 
 ```bash
-PYTHONPATH=. python3 awesome_actus_lib/pension/examples/Stage6_going_concern_quickstart.py
+PYTHONPATH=. python3 awesome_actus_lib/pension/examples/Stage6a_going_concern_quickstart.py
 ```
 
 ## Documentation

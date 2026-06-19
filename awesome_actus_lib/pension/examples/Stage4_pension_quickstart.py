@@ -1,11 +1,4 @@
-"""Stage4_pension_quickstart.py
-
-Stage 4 — deterministic time-varying parameters on top of Stage 1/2/3:
-  - salary growth (annual, geometric)
-  - falling applied conversion rate path (per retirement year)
-  - BVG-threshold indexation in k-year steps
-  - RetirementLossAnalysis (applied CR vs technical CR = 1/ä_x)
-"""
+"""Stage 4 deterministic time-varying parameters: salary growth, falling conversion-rate path, threshold indexation, RetirementLossAnalysis (applied CR vs technical CR = 1/ä_x)."""
 
 import os
 
@@ -42,9 +35,6 @@ print("=" * 78)
 print("PENSION ALM CASE STUDY — Stage 4 — dynamic salary + CR path + KPI")
 print("=" * 78)
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side) — Stage 4: dynamic parameters
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (dynamic parameters)")
 print("-" * 40)
 
@@ -145,11 +135,7 @@ dynamics = Stage4Dynamics(
     threshold_index_period=5,
 )
 
-# Generational table: EK 2001-2005 projected with a 1.25%/yr mortality
-# improvement from the 2003 observation midpoint. This lifts ä_x to a
-# realistic level (fair UWS ~4.9% @65 instead of 5.50% on the raw period
-# table), so the baseline conversion path actually produces a loss rather
-# than the artefactual gain the stale period table implies.
+# Generational projection lifts ä_x to a realistic level (fair CR ~4.9% @65), so the baseline path produces a loss instead of the period table's artefactual gain.
 mortality = ek2001_2005(improvement_rate=0.0125, base_year=2003)
 
 print(f"  Active cohorts: 8 birth-year buckets, retirement age 65")
@@ -162,9 +148,6 @@ print(f"  Mortality:    EK 2001-2005 generational (improvement 1.25%/yr from 200
 print(f"  Horizon:      {HORIZON_YEARS} years")
 
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side)
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets")
 print("-" * 40)
 
@@ -224,9 +207,6 @@ print(f"  Total notional: CHF 400,000,000")
 service = PublicActusService()
 
 
-# =============================================================================
-# 2. EVENT GENERATION
-# =============================================================================
 print("\n[2] Event Generation")
 print("-" * 40)
 
@@ -244,9 +224,6 @@ print(f"  Liability CashFlowStream ready: {len(liability_cfs.events_df)} events"
 
 cohort_hc_df = pd.DataFrame(simulator.cohort_headcount_log)
 
-# =============================================================================
-# 3. MERGING ASSETS AND LIABILITIES
-# =============================================================================
 print("\n[3] Merging assets and liabilities")
 print("-" * 40)
 
@@ -259,12 +236,10 @@ alm = ALMAnalysis(
     flat_rate=policy.technical_rate,
 )
 
-# --- Variant 1: net liquidity per year ------------------------------------
 net_table = alm.net_liquidity(freq="YE")
 print("\n  Variant 1 — Net Liquidity (year-end, first 5 rows):")
 print(net_table.head().to_string())
 
-# --- Variant 2: net-CF diagnostic (not the funding ratio) -----------------
 fr_t0 = alm.funding_ratio(as_of="2025-01-01")
 print(f"\n  Variant 2 — Net-CF diagnostic @ 2025-01-01: {fr_t0:.2%}")
 
@@ -273,7 +248,6 @@ print("  Net-CF diagnostic path:")
 print(fr_path.to_string())
 
 
-# --- Variant 3: combined CashFlowStream ----------------------------------
 def _df_to_raw_response(events_df):
     raw = []
     for cid, grp in events_df.groupby("contractId"):
@@ -302,9 +276,7 @@ combined_cfs = merge_cashflow_streams(asset_cfs, liability_cfs)
 print(f"\n  Variant 3 — Combined CashFlowStream: {len(combined_cfs.events_df)} events "
       f"across {len(combined_cfs.portfolio)} contracts/cohorts")
 
-# =============================================================================
-# 3A-DG. Art. 44 BVV2 funding ratio @ t0 (from fund, not from events)
-# =============================================================================
+# Art. 44 BVV2 funding ratio at t0, computed from the fund rather than from events.
 print("\n[3A-DG] Funding ratio @ t0 (Art. 44 BVV2)")
 print("-" * 40)
 
@@ -325,9 +297,6 @@ breakdown = fra.breakdown()
 print(breakdown.to_string(index=False,
                           float_format=lambda x: f"{x:,.4f}"))
 
-# =============================================================================
-# 3B. Retirement-loss analysis — baseline (5.23% -> 5.10%)
-# =============================================================================
 print("\n[3B] Retirement-loss analysis — baseline (5.23% -> 5.10%)")
 print("-" * 40)
 
@@ -342,9 +311,6 @@ print(loss_df.to_string(index=False,
 base_total = loss_df["loss_total"].sum()
 print(f"\n  Σ baseline loss: CHF {base_total:,.2f}")
 
-# =============================================================================
-# 3C. Retirement-loss analysis — stress (6.8% flat on total capital)
-# =============================================================================
 print("\n[3C] Retirement-loss analysis — stress (6.8% flat, no offset)")
 print("-" * 40)
 
@@ -372,13 +338,10 @@ print(f"  Σ baseline loss: CHF {base_total:,.2f}")
 print(f"  Difference:      CHF {stress_total - base_total:,.2f}")
 
 
-# =============================================================================
-# VERIFY — inline asserts
-# =============================================================================
 print("\n[VERIFY] Inline asserts")
 print("-" * 40)
 
-# (a) annuity_due references
+# (a) annuity_due reference values
 synthetic = MortalityTable(
     q_male={60: 0.0, 61: 0.0, 62: 0.0},
     q_female={60: 0.0, 61: 0.0, 62: 0.0},
@@ -397,7 +360,7 @@ a3 = annuity_due(0, "m", 0.10, tbl, 1)
 assert abs(a3 - 1.4545454545454546) < 1e-12, f"(a3) annuity_due failed: {a3}"
 print(f"  (a) annuity_due references OK.")
 
-# (b) Stage-3 identity: Stage 4 with null dynamics == OpenFundSimulator
+# (b) DynamicFundSimulator with neutral dynamics must equal OpenFundSimulator
 stage4_neutral_dynamics = Stage4Dynamics(
     salary_growth=0.0,
     conversion_rate_path=None,
@@ -423,7 +386,6 @@ rel = abs(sum_s4 - sum_s3) / (abs(sum_s3) + 1e-30)
 assert rel < 1e-9, f"(b) Stage-3 identity violated (rel. diff {rel:.2e})"
 print(f"  (b) Stage-3 identity OK (rel. diff {rel:.2e}).")
 
-# (c) Stress sign + ordering
 violations = stress_df[
     (stress_df["applied_uws"] > stress_df["technical_uws"])
     & (stress_df["loss_per_capita"] <= 0.0)
@@ -433,7 +395,6 @@ assert stress_total > 0, f"(c2) stress total not positive: {stress_total}"
 assert base_total <= stress_total, f"(c3) baseline must be <= stress"
 print(f"  (c) Stress sign + ordering OK.")
 
-# (d) Single-cohort PC sanity
 solo_fund = PensionFund(policy=policy, start_date=START_DATE)
 solo_fund.add_cohort(Cohort(
     cohort_id="SOLO",
@@ -451,11 +412,10 @@ pc_solo = FundingRatioAnalysis(
 assert pc_solo == 1_000_000.0, f"(d) single-cohort PC failed: {pc_solo}"
 print(f"  (d) Single-cohort PC = {pc_solo:,.2f} OK.")
 
-# (e) Funding ratio_t0 sanity: positive and finite
 assert dg_t0 > 0 and dg_t0 < 10, f"(e) funding ratio_t0 unrealistic: {dg_t0:.4f}"
 print(f"  (e) Funding ratio_t0 = {dg_t0:.4%}. OK.")
 
-# (f) Retiree contribution: ä > 1 and pc_contribution == pension*hc*ä
+# (f) retiree pc_contribution must equal pension * headcount * annuity-due
 ret_row = breakdown[breakdown["cohort_id"] == "RETIRED_1955"].iloc[0]
 ret_cohort = next(c for c in liability_fund.cohorts if c.cohort_id == "RETIRED_1955")
 assert ret_row["annuity_due"] > 1.0
@@ -465,9 +425,6 @@ assert rel_f < 1e-9
 print(f"  (f) Retiree pc_contribution matches pension*hc*ä OK.")
 
 
-# =============================================================================
-# 4. PLOTS
-# =============================================================================
 print("\n[4] Plots")
 print("-" * 40)
 
@@ -484,7 +441,6 @@ def _save(fig, name: str) -> None:
     print(f"  Saved: {path}")
 
 
-# --- Plot 1: Net Liquidity (Variant 1) -----------------------------------
 fig1, ax1 = plt.subplots(figsize=(12, 5))
 years = [str(idx.year) for idx in net_table.index]
 x = range(len(years))
@@ -505,7 +461,6 @@ ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig1, "v1_net_liquidity.png")
 
-# --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
 fr_series = alm.funding_ratio_path(fr_dates)
 
@@ -520,13 +475,11 @@ ax2.legend()
 plt.tight_layout()
 _save(fig2, "v2_funding_ratio_path.png")
 
-# --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
 fig3 = combined_cfs.plot(title="Stage 4 — Combined Asset + Liability Cashflows",
                          return_fig=True)
 if fig3 is not None:
     _save(fig3, "v3_combined_cashflows.png")
 
-# --- Plot 4: Cohort headcount decline ------------------------------------
 fig4, ax4 = plt.subplots(figsize=(12, 5))
 colors = {"ACTIVE_1990": "#2a9d8f", "ACTIVE_1970": "#e9c46a", "RETIRED_1955": "#e76f51"}
 for cid in ["ACTIVE_1990", "ACTIVE_1970", "RETIRED_1955"]:
@@ -542,7 +495,6 @@ ax4.legend()
 plt.tight_layout()
 _save(fig4, "v4_cohort_headcount_decline.png")
 
-# --- Plot 5: CR path — applied vs technical ------------------------------
 fig5, ax5 = plt.subplots(figsize=(11, 5))
 plot_df = loss_df.sort_values("year")
 ax5.plot(plot_df["year"], plot_df["applied_uws"] * 100,
@@ -559,7 +511,6 @@ ax5.legend()
 plt.tight_layout()
 _save(fig5, "v5_uws_path.png")
 
-# --- Plot 6: Retirement loss per year ------------------------------------
 fig6, ax6 = plt.subplots(figsize=(11, 5))
 agg = (loss_df.groupby("year")["loss_total"].sum()
        .sort_index())

@@ -23,7 +23,6 @@ def _find_index_for_date(sim, base_date: str, target_date: str, freq_key: str = 
     if target_str in dates:
         return dates.index(target_str)
 
-    # If not exact match, find closest date
     date_ts = pd.to_datetime(dates)
     idx = np.argmin(np.abs(date_ts - target))
     return int(idx)
@@ -58,7 +57,6 @@ class StochasticFundingRatioAnalysis:
                 f"salm.n_paths ({salm.n_paths}) for position-wise pairing."
             )
 
-        # Deterministic t0 reference (kept for back-compat and t0 collapse).
         fra = FundingRatioAnalysis(
             self.fund,
             self.mortality,
@@ -72,7 +70,7 @@ class StochasticFundingRatioAnalysis:
         return self._pc_t0
 
     def _legacy_distribution(self, as_of: str) -> np.ndarray:
-        """Stage 5a Phase 2 behaviour: V_i(d) / PC_t0 with frozen denominator."""
+        """Legacy mode: V_i(d) / PC_t0 with frozen denominator."""
         sim_equity = self.salm.equity_simulation
         n_paths = self.salm.n_paths
 
@@ -164,11 +162,7 @@ class StochasticFundingRatioAnalysis:
 
     
     def funding_ratio_distribution(self, as_of: str) -> np.ndarray:
-        """Solvency funding-ratio distribution at ``as_of`` across all paths.
-
-        Legacy mode (``liab_paths=None``): ``V_i(d) / PC_t0``.
-        Forward mode: ``V_t,i / PC_t,i`` with coupled survivors.
-        """
+        """Funding-ratio distribution across paths: legacy V_i(d)/PC_t0, else V_t,i/PC_t,i."""
         self.salm._check_ran()
         if self.liab_paths is None:
             return self._legacy_distribution(as_of)
@@ -184,7 +178,6 @@ class StochasticFundingRatioAnalysis:
         return out
 
     def summary(self, as_of: str) -> dict:
-        """Distributional + tail-risk summary of the solvency funding ratio at as_of."""
         dist = self.funding_ratio_distribution(as_of)
         p5 = float(np.percentile(dist, 5))
         return {
@@ -205,7 +198,6 @@ class StochasticFundingRatioAnalysis:
         dates: Sequence[str],
         quantiles: Sequence[int] = (5, 25, 50, 75, 95),
     ) -> pd.DataFrame:
-        """Quantiles of the stochastically simulated funding ratio over dates."""
         rows = {}
         for d in dates:
             dist = self.funding_ratio_distribution(d)

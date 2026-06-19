@@ -70,7 +70,7 @@ class OpenFundSimulator(ClosedFundSimulator):
                     sink=per_contract_events[cohort.cohort_id],
                     policy=policy,
                 )
-                self._apply_mortality(cohort, age)
+                self._apply_mortality(cohort, age, sim_year)
                 self.cohort_headcount_log.append({
                     "year": sim_year,
                     "cohort_id": cohort.cohort_id,

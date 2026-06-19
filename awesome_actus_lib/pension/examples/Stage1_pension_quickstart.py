@@ -1,10 +1,4 @@
-"""Stage1_pension_quickstart.py
-
-Stage 1 — closed-fund baseline:
-  - PensionPolicy + Cohort + PensionFund (the three building blocks)
-  - ClosedFundSimulator (annual steps, no new entrants, no mortality)
-  - ALM merging variants (net liquidity, funding ratio, combined CF)
-"""
+"""Stage 1 closed-fund baseline: policy/cohort/fund, ClosedFundSimulator, ALM merging variants."""
 
 import os
 
@@ -29,9 +23,6 @@ print("=" * 78)
 print("PENSION ALM CASE STUDY — Stage 1 — closed-fund baseline")
 print("=" * 78)
 
-# =============================================================================
-# 1A. PORTFOLIO DEFINITION (liability side)
-# =============================================================================
 print("\n[1A] Portfolio Definition — liabilities (closed fund)")
 print("-" * 40)
 
@@ -69,9 +60,6 @@ print(f"  Cohort 3:  80 members, born 1955, AGH/head CHF 600,000")
 print(f"  Total members: 430  (closed fund — no new entrants)")
 
 
-# =============================================================================
-# 1B. PORTFOLIO DEFINITION (asset side)
-# =============================================================================
 print("\n[1B] Portfolio Definition — assets")
 print("-" * 40)
 
@@ -131,9 +119,6 @@ print(f"  Total notional: CHF 100,000,000")
 service = PublicActusService()
 
 
-# =============================================================================
-# 2. EVENT GENERATION
-# =============================================================================
 print("\n[2] Event Generation")
 print("-" * 40)
 
@@ -143,9 +128,6 @@ print(f"  Asset CashFlowStream ready: {len(asset_cfs.events_df)} events")
 liability_cfs = ClosedFundSimulator(liability_fund).run(horizon_years=HORIZON_YEARS)
 print(f"  Liability CashFlowStream ready: {len(liability_cfs.events_df)} events")
 
-# =============================================================================
-# 3. MERGING ASSETS AND LIABILITIES
-# =============================================================================
 print("\n[3] Merging assets and liabilities")
 print("-" * 40)
 
@@ -158,12 +140,10 @@ alm = ALMAnalysis(
     flat_rate=policy.technical_rate,
 )
 
-# --- Variant 1: net liquidity per year ------------------------------------
 net_table = alm.net_liquidity(freq="YE")
 print("\n  Variant 1 — Net Liquidity (year-end, first 5 rows):")
 print(net_table.head().to_string())
 
-# --- Variant 2: funding ratio (PV comparison) -----------------------------
 fr_t0 = alm.funding_ratio(as_of="2025-01-01")
 print(f"\n  Variant 2 — Funding Ratio @ 2025-01-01: {fr_t0:.2%}")
 
@@ -171,7 +151,6 @@ fr_path = alm.funding_ratio_path(["2025-01-01", "2030-01-01", "2035-01-01"])
 print("  Funding Ratio path:")
 print(fr_path.to_string())
 
-# --- Variant 3: combined CashFlowStream ----------------------------------
 def _df_to_raw_response(events_df):
     raw = []
     for cid, grp in events_df.groupby("contractId"):
@@ -201,9 +180,6 @@ print(f"\n  Variant 3 — Combined CashFlowStream: {len(combined_cfs.events_df)}
       f"across {len(combined_cfs.portfolio)} contracts/cohorts")
 
 
-# =============================================================================
-# 4. PLOTS
-# =============================================================================
 print("\n[4] Plots")
 print("-" * 40)
 
@@ -220,7 +196,6 @@ def _save(fig, name: str) -> None:
     print(f"  Saved: {path}")
 
 
-# --- Plot 1: Net Liquidity (Variant 1) -----------------------------------
 fig1, ax1 = plt.subplots(figsize=(12, 5))
 years = [str(idx.year) for idx in net_table.index]
 x = range(len(years))
@@ -241,7 +216,6 @@ ax1.grid(True, axis="y", linestyle="--", alpha=0.5)
 plt.tight_layout()
 _save(fig1, "v1_net_liquidity.png")
 
-# --- Plot 2: Funding Ratio Path (Variant 2) ------------------------------
 fr_dates = [f"{y}-01-01" for y in range(START_YEAR, START_YEAR + HORIZON_YEARS, 5)]
 fr_series = alm.funding_ratio_path(fr_dates)
 
@@ -256,7 +230,6 @@ ax2.legend()
 plt.tight_layout()
 _save(fig2, "v2_funding_ratio_path.png")
 
-# --- Plot 3: Combined CashFlowStream (Variant 3) -------------------------
 fig3 = combined_cfs.plot(title="Stage 1 — Combined Asset + Liability Cashflows",
                          return_fig=True)
 if fig3 is not None:
